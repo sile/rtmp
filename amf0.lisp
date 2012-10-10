@@ -86,8 +86,7 @@
      'double-float)))
   
 (defun decode-number (in)
-  (let ((code (+ (ash (read-byte in) 8)
-		 (ash (read-byte in) 0))))
+  (let ((code (read-int 8 in)))
     (make-number-type :value (decode-double code))))
 
 (defun encode-double (double)
@@ -119,10 +118,10 @@
 
 (defun decode-string (in)
   (let ((length (read-int 2 in)))
-    (make-string-type :value (sb-ext:octets-to-string (read-bytes length in)))))
+    (make-string-type :value (creole:octets-to-string (read-bytes length in)))))
 
 (defun encode-string (s)
-  (let* ((bytes (sb-ext:string-to-octets s))
+  (let* ((bytes (creole:string-to-octets s))
 	 (len (length bytes)))
     (to-flat-octets
      (to-bytes (if (< len #x10000) 2 4) len)
@@ -139,7 +138,7 @@
 
 (defun decode-long-string (in)
   (let ((length (read-int 4 in)))
-    (make-long-string-type :value (sb-ext:octets-to-string (read-bytes length in)))))
+    (make-long-string-type :value (creole:octets-to-string (read-bytes length in)))))
 
 (defmethod encode ((v long-string-type))
   (to-flat-octets
@@ -152,7 +151,7 @@
 
 (defun decode-xml-document (in)
   (let ((length (read-int 4 in)))
-    (make-xml-document-type :value (sb-ext:octets-to-string (read-bytes length in)))))
+    (make-xml-document-type :value (creole:octets-to-string (read-bytes length in)))))
 
 (defmethod encode ((v xml-document-type))
   (to-flat-octets
@@ -166,9 +165,9 @@
 (defstruct (object-end-type (:include value-type)))
 
 (defun decode-object (in)
-  (loop FOR (key v) = (values (decode-string in) (decode in))
+  (loop FOR (key v) = (list (print (decode-string in)) (decode in))
 	UNTIL (object-end-type-p v)
-	COLLECT (list key v) INTO list
+	COLLECT (print (list key v)) INTO list
 	FINALLY (return (make-object-type :value list))))
 
 (defmethod encode ((v object-type))
@@ -185,7 +184,7 @@
 
 (defun decode-typed-object (in)
   (let ((class-name (decode-string in)))
-    (loop FOR (key v) = (values (decode-string in) (decode in))
+    (loop FOR (key v) = (list (decode-string in) (decode in))
 	  UNTIL (object-end-type-p v)
 	  COLLECT (list key v) INTO list
 	  FINALLY (return (make-typed-object-type
@@ -238,7 +237,7 @@
 (defun decode-ecma-array (in)
   (let ((size (read-int 4 in)))
     (loop REPEAT size
-	  FOR (key v) = (values (decode-string in) (decode in))
+	  FOR (key v) = (list (decode-string in) (decode in))
 	  COLLECT (list key v) INTO list
 	  FINALLY (return (make-ecma-array-type :value list)))))
 
@@ -273,8 +272,7 @@
   (timezone 0 :type (unsigned-byte 16))) ; shuld be 0
 
 (defun decode-date (in)
-  (let ((code (+ (ash (read-byte in) 8)
-		 (ash (read-byte in) 0))))
+  (let ((code (read-int 8 in)))
     (make-date-type :value (decode-double code)
 		    :timezone (read-int 2 in))))
 

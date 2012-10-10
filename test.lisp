@@ -230,6 +230,13 @@
      (amf0::encode (assoc-to-object opt-args))
      )))
 
+(defun build-message (msg-type-id msg-stream-id timestamp payload)
+  (to-flat-octets
+   msg-type-id
+   (to-bytes 3 (length payload))
+   (to-bytes 4 timestamp)
+   (to-bytes 3 msg-stream-id)
+   payload))
 
 (defun rtmp-cmd-connect (sock)
   (let ((io (socket-make-stream sock :input t :output t :element-type 'octet))
@@ -237,12 +244,13 @@
 	(msg-stream-id 33)
 	(chunk-stream-id 44)
 	(timestamp 100)
+	(payload (rtmp-cmd-connect-bytes))
 	)
     (let ((data
 	   (build-chunk 
 	    0 
 	    chunk-stream-id
-	    (rtmp-cmd-connect-bytes)
+	    (build-message msg-type-id msg-stream-id timestamp payload)
 	    :timestamp timestamp
 	    :msg-type-id msg-type-id
 	    :msg-stream-id msg-stream-id)))
