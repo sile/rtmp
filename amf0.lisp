@@ -302,3 +302,83 @@
       (#.+STRICT_ARRAY_MARKER+ (decode-array in))
       (#.+DATE_MARKER+ (decode-date in))
       )))
+
+;; amf packet
+(defstruct header
+  (name t :type string)
+  (must-understand t :type boolean)
+  (length 0 :type (unsigned-byte 32))  ; (U32)-1 if unknown
+  (value t :type value-type))
+
+(defstruct message
+  (target-uri t :type string)
+  (response-uri t :type string)
+  (length 0 :type (unsigned-byte 32))  ; (U32)-1 if unknown
+  (value t :type value-type))
+
+(defstruct packet
+  (version 0 :type (unsigned-byte 16)) ; value must be 0 for AMF 0
+;  (header-count 0 :type (unsigned-byte 16))
+  (headers t :type list)
+;  (message-count 0 :type (unsigned-byte 16))
+  (messages t :type list))
+
+(defun decode-header (in)
+  (let ((name (decode-string in))
+	(must-understand (read-byte in))
+	(length (read-int 4 in))
+	(value (decode in)))
+    (make-header :name name
+		 :must-understand (/= must-understand 0)
+		 :length length
+		 :value value)))
+
+(defun decode-message (in)
+  (let ((target-uri (decode-string in))
+	(response-uri (decode-string in))
+	(length (read-int 4 in))
+	(value (decode in)))
+    (make-message :target-uri target-uri
+		  :response-uri response-uri
+		  :length length
+		  :value value)))
+
+(defmethod encode ((v header))
+  (with-slots (name must-understand length value) v
+    (to-flat-octets
+     (encode-string name)
+     (if must-understand 1 0)
+     (to-bytes 4 length)
+     (encode value))))
+
+(defmethod encode ((v message))
+  (with-slots (target-uri response-uri length value) v
+    (to-flat-octets
+     (encode-string target-uri)
+     (encode-string response-uri)
+     (to-bytes 4 length)
+     (encode value))))
+
+(defmethod encode ((v packet))
+  (with-slots (version headers messages) v
+    (to-flat-octets
+     (to-bytes 2 version) ; must be 0
+     (to-bytes 2 (length headers))
+     (apply #'to-flat-octets (loop FOR x IN headers COLLECT (encode x)))
+     (to-bytes 2 (length messages))
+     (apply #'to-flat-octets (loop FOR x IN messages COLLECT (encode x)))
+     )))
+
+(defun decode-packet (in)
+  (let ((version (read-int 2 in)))
+    (assert (= version 0) () "version must be 0: ~a" version)
+
+    (let* ((header-count (read-int 2 in))
+	   (headers (loop REPEAT header-count COLLECT (decode-header in)))
+	   (message-count (read-int 2 in))
+	   (messages (loop REPEAT message-count COLLECT (decode-message in)))
+	   )
+      (make-packet :version version
+		   :headers headers
+		   :messages messages)
+      )))
