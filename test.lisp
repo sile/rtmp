@@ -67,8 +67,9 @@
     (let ((send-timestamp (write-c0/c1 io)))
       (multiple-value-bind (recv-timestamp random-bytes)
 			   (read-s0/s1 io)
-			   (write-s2 send-timestamp recv-timestamp random-bytes io)
-			   (read-s2 io)))))
+        (write-s2 send-timestamp recv-timestamp random-bytes io)
+	(read-s2 io)
+	t))))
 
 (defstruct chunk
   basic-header
@@ -190,6 +191,65 @@
      :msg-stream-id msg-stream-id
      )))
 
+(defun to-flat-octets (&rest values)
+  (to-octets
+   (loop FOR v IN values
+	 APPEND
+	 (etypecase v
+	   (octet (list v))
+	   (list  v)
+	   (simple-octets (coerce v 'list))
+	   ))))
+
+(defun assoc-to-object (list)
+  (amf0::make-object-type
+   :value
+   (loop FOR (key value) IN list
+	 COLLECT (list key (etypecase value
+	                     (string (amf0::make-string-type :value value))
+			     (number (amf0::make-number-type :value (coerce value 'double-float)))
+			     (boolean (amf0::make-boolean-type :value value)))))))
+
+(defun rtmp-cmd-connect-bytes ()
+  (let ((name "connect")
+	(transaction-id 1)
+	(params `(("app" "live")
+		  ("flashver" "FMSc/1.0")
+		  ("swfUrl" "file://c:/FlvPlayer.swf")
+		  ("tcUrl" "rtmp://192.168.100.103/live/livestream")
+		  ("fpad" nil)
+		  ("audioCodecs" #x0FFF)
+		  ("videoCodecs" #x00FF)
+		  ("pageUrl" "http://somehost/sample.html")
+		  ("objectEncoding" 0)))
+	(opt-args '()))
+    (to-flat-octets
+     (amf0::encode (amf0::make-string-type :value name))
+     (amf0::encode (amf0::make-number-type :value (coerce transaction-id 'double-float)))
+     (amf0::encode (assoc-to-object params))
+     (amf0::encode (assoc-to-object opt-args))
+     )))
+
+
+(defun rtmp-cmd-connect (sock)
+  (let ((io (socket-make-stream sock :input t :output t :element-type 'octet))
+	(msg-type-id 20)  ; for AMF0
+	(msg-stream-id 33)
+	(chunk-stream-id 44)
+	(timestamp 100)
+	)
+    (let ((data
+	   (build-chunk 
+	    0 
+	    chunk-stream-id
+	    (rtmp-cmd-connect-bytes)
+	    :timestamp timestamp
+	    :msg-type-id msg-type-id
+	    :msg-stream-id msg-stream-id)))
+      (write-sequence data io)
+      (force-output io)
+    t)))
+
 #|
 command massage
  - message-type 20 for AMF0
@@ -198,7 +258,10 @@ command massage
 
 
 (define-symbol-macro cli 
-  (progn (defparameter *cli* (make-connected-socket "localhost" 1935))
+  (progn (defparameter *cli* 
+	   ;;(make-connected-socket "localhost" 1935)
+	   (make-connected-socket "172.16.250.131" 8080)
+	   )
 	 *cli*))
 (define-symbol-macro cls
   (socket-close *cli*))

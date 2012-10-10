@@ -60,7 +60,9 @@
 	 APPEND
 	 (etypecase v
 	   (octet (list v))
-	   (list  v)
+	   (list (if (typep (car v) 'simple-octets)
+		     (coerce (apply #'to-flat-octets v) 'list)
+		   v))
 	   (simple-octets (coerce v 'list))
 	   ))))
 
@@ -173,7 +175,7 @@
   (to-flat-octets
    (to-bytes 2 +OBJECT_MARKER+)
    (loop FOR (key x) IN (object-type-value v)
-	 APPEND (append (encode-string key) (encode x)))
+	 COLLECT (to-flat-octets (encode-string key) (encode x)))
    (to-bytes 2 +OBJECT_END_MARKER+)))
 
 ;; typed object
@@ -195,7 +197,7 @@
    (to-bytes 2 +TYPED_OBJECT_MARKER+)
    (encode-string (typed-object-type-class-name v))
    (loop FOR (key x) IN (typed-object-type-value v)
-	 APPEND (append (encode-string key) (encode x)))
+	 COLLECT (to-flat-octets (encode-string key) (encode x)))
    (to-bytes 2 +OBJECT_END_MARKER+)))
 
 
