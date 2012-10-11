@@ -7,7 +7,7 @@
   :description "TODO:"
 
   :serial t
-  :depends-on (:creole)
+  :depends-on (:creole :flexi-streams)
   :components ((:file "package")
 
 			   (:file "utils/package")
