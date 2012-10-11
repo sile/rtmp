@@ -12,10 +12,10 @@
   (show-log "send c0# version=~a" version)
   (show-log "send c1# timestamp=~a, zero=~a" timestamp zero))
 
-(defun send-c2 (out s1-timestamp c1-timestamp s1-random-bytes)
-  (write-handshake-2 out s1-timestamp c1-timestamp s1-random-bytes)
+(defun send-c2 (out s1-timestamp-echo c1-timestamp s1-random-bytes-echo)
+  (write-handshake-2 out s1-timestamp-echo c1-timestamp s1-random-bytes-echo)
   (force-output out)
-  (show-log "send c2# timestamp1=~a, timestamp2=~a" s1-timestamp c1-timestamp))
+  (show-log "send c2# timestamp1=~a, timestamp2=~a" s1-timestamp-echo c1-timestamp))
           
 (defun recv-s0/s1 (in sent-version)
   (let ((recv-version (read-handshake-0 in)))
