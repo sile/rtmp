@@ -1,8 +1,6 @@
 (defpackage rtmp.amf0
   (:use :common-lisp :rtmp.utils)
-  (:export parse ;; TODO: delete
-		   
-	   encode
+  (:export encode
 	   decode))
 (in-package :rtmp.amf0)
 

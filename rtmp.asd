@@ -14,8 +14,9 @@
 			   (:file "utils/utils")
 
 			   (:file "amf0/package")
-			   (:file "amf0/types")
-			   (:file "amf0/parser")
+			   (:file "amf0/marker")
+			   (:file "amf0/decoder")
+			   (:file "amf0/encoder")
 			   (:file "amf0/amf0")
 
 			   (:file "rtmp")))
