@@ -10,13 +10,16 @@
   :depends-on (:creole :flexi-streams)
   :components ((:file "package")
 
-			   (:file "utils/package")
-			   (:file "utils/utils")
+               (:file "utils/package")
+               (:file "utils/utils")
 
-			   (:file "amf0/package")
-			   (:file "amf0/marker")
-			   (:file "amf0/decoder")
-			   (:file "amf0/encoder")
-			   (:file "amf0/amf0")
+               (:file "amf0/package")
+               (:file "amf0/marker")
+               (:file "amf0/decoder")
+               (:file "amf0/encoder")
+               (:file "amf0/amf0")
 
-			   (:file "rtmp")))
+               (:file "message/package")
+               (:file "message/message")
+
+               (:file "rtmp")))
