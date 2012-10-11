@@ -1,3 +1,5 @@
+(require :creole)
+
 (defpackage amf0
   (:use :common-lisp)
   )
@@ -165,9 +167,9 @@
 (defstruct (object-end-type (:include value-type)))
 
 (defun decode-object (in)
-  (loop FOR (key v) = (list (print (decode-string in)) (decode in))
+  (loop FOR (key v) = (list (decode-string in) (decode in))
 	UNTIL (object-end-type-p v)
-	COLLECT (print (list key v)) INTO list
+	COLLECT (list key v) INTO list
 	FINALLY (return (make-object-type :value list))))
 
 (defmethod encode ((v object-type))

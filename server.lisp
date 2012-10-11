@@ -87,7 +87,8 @@
   msg-stream-id
 
   (timestamp-delta 0)
-  per-msg-len
+  total-msg-len
+  (per-msg-len 128) ; default?
   
   payload)
 
@@ -105,21 +106,23 @@
 	   (setf msg-len (read-int 4 in)))
 
 	 (setf (chunk-msg-timestamp chunk-msg) timestamp
-	       (chunk-msg-per-msg-len chunk-msg) msg-len
+	       (chunk-msg-total-msg-len chunk-msg) msg-len
 	       (chunk-msg-msg-type-id chunk-msg) msg-type-id
 	       (chunk-msg-msg-stream-id chunk-msg) msg-stream-id)))
     (1 (let ((timestamp-delta (read-int 3 in))
 	     (msg-len (read-int 3 in))
 	     (msg-type-id (read-byte in)))
 	 (setf (chunk-msg-timestamp-delta chunk-msg) timestamp-delta
-	       (chunk-msg-per-msg-len chunk-msg) msg-len
+	       (chunk-msg-total-msg-len chunk-msg) msg-len
 	       (chunk-msg-msg-type-id chunk-msg) msg-type-id)))
     (2 (let ((timestamp-delta (read-int 3 in)))
 	 (setf (chunk-msg-timestamp-delta chunk-msg) timestamp-delta)))
     (3 ))
   
   (incf (chunk-msg-timestamp chunk-msg) (chunk-msg-timestamp-delta chunk-msg))
-  (let ((data (read-bytes (chunk-msg-per-msg-len chunk-msg) in)))
+  (let ((data (read-bytes (min (chunk-msg-per-msg-len chunk-msg) 
+							   (- (chunk-msg-total-msg-len chunk-msg) (length (chunk-msg-payload chunk-msg))))
+						  in)))
     (setf (chunk-msg-payload chunk-msg)
 	  (to-flat-octets (chunk-msg-payload chunk-msg) data)))
   )
@@ -131,52 +134,38 @@
     (setf (chunk-msg-chunk-stream-id chunk-msg) chunk-stream-id)
 
     (srv-read-chunk-msg-header fmt chunk-msg in)
-    (format t "~&; chunk:basic-header: cs-id=~a, timestamp=~a, tid=~a, sid=~a, len=~a, payload=~a~%"
+    (format t "~&; chunk:msg-header: cs-id=~a, timestamp=~a, tid=~a, sid=~a, len=~a, total-len=~a, payload=~a~%"
 	    (chunk-msg-chunk-stream-id chunk-msg)
 	    (chunk-msg-timestamp chunk-msg)
 	    (chunk-msg-msg-type-id chunk-msg)
 	    (chunk-msg-msg-stream-id chunk-msg)
 	    (chunk-msg-per-msg-len chunk-msg)
+	    (chunk-msg-total-msg-len chunk-msg)
 	    (length (chunk-msg-payload chunk-msg)))
     t))
 
 (defun srv-read-message (chunk-msg in)
   ;; XXX: 一回で全て読み取れると仮定
   (srv-read-chunk chunk-msg in)
+  (loop WHILE (/= (chunk-msg-total-msg-len chunk-msg)
+				  (length (chunk-msg-payload chunk-msg)))
+		DO
+		(srv-read-chunk chunk-msg in))
   (let* ((chunk-payload (chunk-msg-payload chunk-msg)))
     (with-open-file (out "/tmp/chunk.tmp" :direction :output
 			 :element-type 'octet
 			 :if-exists :supersede)
       (write-sequence chunk-payload out)))
   t)
-#|
-  (let* ((chunk-payload (chunk-msg-payload chunk-msg))
-	 (msg-type-id (aref chunk-payload 0))
-	 (msg-paylaod-len (+ (ash (aref chunk-payload 1) 16)
-			     (ash (aref chunk-payload 2) 8)
-			     (aref chunk-payload 3)))
-	 (msg-timestamp (+ (ash (aref chunk-payload 4) 24)
-			   (ash (aref chunk-payload 5) 16)
-			   (ash (aref chunk-payload 6) 8)
-			   (ash (aref chunk-payload 7) 0)))
-	 (msg-payload-len (+ (ash (aref chunk-payload 8) 16)
-			     (ash (aref chunk-payload 9) 8)
-			     (aref chunk-payload 10)))
-	 (msg-payload (subseq chunk-payload 11)))
-    (format t "~&; msg: tid=~a, plen=~a, timestamp=~a~%"
-	    msg-type-id msg-paylaod-len msg-timestamp))
-  t)
-|#
 
-
-(loop WITH server = srv
-      WITH chunk-msg = (make-chunk-msg)
-  DO
-  (with-accept (io client server)
-    (srv-handshake io)
-    
-    (srv-read-message chunk-msg io)
-    ))
+(define-symbol-macro lp
+  (loop WITH server = srv
+		WITH chunk-msg = (make-chunk-msg)
+		DO
+		(with-accept (io client server)
+		  (srv-handshake io)
+		  (srv-read-message chunk-msg io)
+		  )))
 
 (with-open-file (in "/tmp/chunk.tmp" :element-type 'octet)
   (list (amf0::decode in)
