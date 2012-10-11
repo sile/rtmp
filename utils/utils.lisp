@@ -35,6 +35,12 @@
 							   (* (- byte-width i 1) 8))
 				COLLECT `(ash (read-byte ,in) ,offset)))))
 
+(defun read-bytes (length in)
+  (let ((buffer (make-array length :element-type '(unsigned-byte 8)))) ; TODO: octet
+    ;; TODO: read length check
+    (read-sequence buffer in)
+    buffer))
+    
 (defmacro write-uint (byte-width value out &key (endian :big))
   (declare ((integer 1 8) byte-width)
 		   ((member :big :little) endian))
@@ -47,3 +53,9 @@
 							  (* (- byte-width i 1) 8))
 			   COLLECT `(write-byte (ldb (byte 8 ,offset) ,v) ,out))
 	   (values))))
+
+(defun write-bytes (bytes out)
+  ;; TODO: declare
+  ;; TODO: wrote length check
+  (write-sequence bytes out)
+  (values))

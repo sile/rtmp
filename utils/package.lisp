@@ -4,5 +4,7 @@
 		   encode-double-float
 		   
 		   write-uint
-		   read-uint))
+		   write-bytes
+		   read-uint
+		   read-bytes))
 (in-package :rtmp.utils)

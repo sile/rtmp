@@ -2,8 +2,8 @@
   (:use :common-lisp :rtmp.utils)
   (:export parse ;; TODO: delete
 		   
-		   encode
-		   decode))
+	   encode
+	   decode))
 (in-package :rtmp.amf0)
 
 (deftype octet () '(unsigned-byte 8))

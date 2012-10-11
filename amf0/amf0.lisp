@@ -1,5 +1,8 @@
-(in-package :rtmp.amf)
+(in-package :rtmp.amf0)
 
-(defun parse (in)
-  (parse-impl in))
+(defun encode (value out)
+  (encode-impl value out))
+
+(defun decode (in)
+  (decode-impl in))
 
