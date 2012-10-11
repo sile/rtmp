@@ -226,6 +226,15 @@
 	   (amf0::encode (assoc-to-object opt-args)))
      )))
 
+(defun rtmp-cmd-create-stream-bytes ()
+  (let ((name "createStream")
+		(transaction-id 111))
+    (to-flat-octets
+     (amf0::encode (amf0::make-string-type :value name))
+     (amf0::encode (amf0::make-number-type :value (coerce transaction-id 'double-float)))
+     (amf0::encode (assoc-to-object '())) ;;(amf0::make-null-type)) ; nullだと駄目？
+     )))
+
 (defparameter *default-chunk-size* 128)
 
 (defun build-chunks (chunk-stream-id msg-type-id msg-stream-id timestamp payload &aux (len (length payload)))
@@ -284,7 +293,7 @@
 	(force-output out))
   t)
 
-(defun rtmp-cmd-connect (sock)
+(defun rtmp-cmd-connect (sock &optional (msg (make-chunk-msg)))
   (let ((io (socket-make-stream sock :input t :output t :element-type 'octet))
 	(msg-type-id 20)  ; for AMF0
 	(msg-stream-id 33)
@@ -304,7 +313,7 @@
   
 	;; recv
 	(format t "~&; recv 'connect' response~%")
-	(let ((msg (make-chunk-msg)))
+	(let ((msg msg))
 	  
 	  ;; acknowledge window size
 	  (srv-read-message msg io)
@@ -335,6 +344,42 @@
 	  )
 	)
   )
+
+(defun rtmp-cmd-create-stream (sock &optional (msg (make-chunk-msg)))
+  (let ((io (socket-make-stream sock :input t :output t :element-type 'octet))
+	(msg-type-id 20)  ; for AMF0
+	(msg-stream-id 34)
+	(chunk-stream-id 45)
+	(timestamp 200)
+	(payload (rtmp-cmd-create-stream-bytes))
+	)
+	
+	;; send
+	(format t "~&; send 'createStream'~%")
+    (dolist (data (build-chunks chunk-stream-id msg-type-id msg-stream-id timestamp payload))
+      (write-sequence data io))
+	(force-output io)
+  
+	;; recv
+	(format t "~&; recv 'createStream' response~%")
+	(let ((msg msg))
+	  ;; recv
+	  ;; command-message
+	  (srv-read-message msg io)	  
+	  (prog1 
+		  (parse-command-message msg)
+		(setf (chunk-msg-payload msg) '()))
+	  )
+	)
+  )
+
+(defun test ()
+  (let ((msg (make-chunk-msg)))
+	cls
+	(rtmp-handshake cli)
+	(print (rtmp-cmd-connect *cli* msg))
+	(rtmp-cmd-create-stream *cli* msg)
+  ))
 
 #|
 command massage
