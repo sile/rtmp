@@ -146,8 +146,8 @@
     (to-octets (to-bytes 4 timestamp))))
 
 (defun build-chunk (fmt chunk-stream-id data &key timestamp timestamp-delta 
-			                          msg-type-id msg-stream-id
-					     &aux (msg-length (length data)))
+						                          msg-type-id msg-stream-id
+												  (msg-length (length data)))
 						  
   (concatenate
    'simple-octets
@@ -213,30 +213,34 @@
 (defun rtmp-cmd-connect-bytes ()
   (let ((name "connect")
 	(transaction-id 1)
-	(params `(("app" "live")
-		  ("flashver" "FMSc/1.0")
-		  ("swfUrl" "file://c:/FlvPlayer.swf")
-		  ("tcUrl" "rtmp://192.168.100.103/live/livestream")
-		  ("fpad" nil)
-		  ("audioCodecs" #x0FFF)
-		  ("videoCodecs" #x00FF)
-		  ("pageUrl" "http://somehost/sample.html")
-		  ("objectEncoding" 0)))
+	(params `(("app" "")
+			  ("type" "nonprivate") ; ffmpeg
+			  ("flashver" "FMLE/3.0 (compatible; Lavf53.24.2)")
+			  ("tcUrl" "rtmp://192.168.137.95:8080/")))
 	(opt-args '()))
     (to-flat-octets
      (amf0::encode (amf0::make-string-type :value name))
      (amf0::encode (amf0::make-number-type :value (coerce transaction-id 'double-float)))
      (amf0::encode (assoc-to-object params))
-     (amf0::encode (assoc-to-object opt-args))
+     (when opt-args
+	   (amf0::encode (assoc-to-object opt-args)))
      )))
 
-(defun build-message (msg-type-id msg-stream-id timestamp payload)
-  (to-flat-octets
-   msg-type-id
-   (to-bytes 3 (length payload))
-   (to-bytes 4 timestamp)
-   (to-bytes 3 msg-stream-id)
-   payload))
+(defparameter *default-chunk-size* 128)
+
+(defun build-chunks (chunk-stream-id msg-type-id msg-stream-id timestamp payload &aux (len (length payload)))
+  (cons (build-chunk 0
+					 chunk-stream-id
+					 (subseq payload 0 (min len *default-chunk-size*))
+					 :timestamp timestamp
+					 :msg-type-id msg-type-id
+					 :msg-stream-id msg-stream-id
+					 :msg-length len)
+		(loop FOR offset FROM *default-chunk-size* BELOW (length payload) BY *default-chunk-size*
+			  WHILE (< offset len)
+		  COLLECT
+		  (build-chunk 3 chunk-stream-id (subseq payload offset (min len (+ offset *default-chunk-size*)))))
+		))
 
 (defun rtmp-cmd-connect (sock)
   (let ((io (socket-make-stream sock :input t :output t :element-type 'octet))
@@ -246,17 +250,11 @@
 	(timestamp 100)
 	(payload (rtmp-cmd-connect-bytes))
 	)
-    (let ((data
-	   (build-chunk 
-	    0 
-	    chunk-stream-id
-	    (build-message msg-type-id msg-stream-id timestamp payload)
-	    :timestamp timestamp
-	    :msg-type-id msg-type-id
-	    :msg-stream-id msg-stream-id)))
+    (dolist (data (build-chunks chunk-stream-id msg-type-id msg-stream-id timestamp payload))
       (write-sequence data io)
-      (force-output io)
-    t)))
+      (write-sequence data out))
+	(force-output io))
+  t)
 
 #|
 command massage
@@ -264,11 +262,11 @@ command massage
  - message-type 17 for AMF3
 |#
 
-
 (define-symbol-macro cli 
   (progn (defparameter *cli* 
 	   ;;(make-connected-socket "localhost" 1935)
-	   (make-connected-socket "172.16.250.131" 8080)
+	   ;;(make-connected-socket "172.16.250.131" 8080)
+	   (make-connected-socket "192.168.136.112" 9090)
 	   )
 	 *cli*))
 (define-symbol-macro cls

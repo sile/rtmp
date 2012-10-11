@@ -88,7 +88,7 @@
 
   (timestamp-delta 0)
   total-msg-len
-  (per-msg-len 128) ; default?
+  (per-msg-len 128) ; XXX: default?
   
   payload)
 
@@ -167,10 +167,10 @@
 		  (srv-read-message chunk-msg io)
 		  )))
 
+#+C
 (with-open-file (in "/tmp/chunk.tmp" :element-type 'octet)
   (list (amf0::decode in)
-	(amf0::decode in)
-	(amf0::decode in)
-	))
-
-;	(amf0::decode in)))
+		(amf0::decode in)
+		(amf0::decode in)
+		(ignore-errors (amf0::decode in))
+		))

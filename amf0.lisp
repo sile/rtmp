@@ -102,7 +102,7 @@
   
 (defmethod encode ((v number-type))
   (with-slots (value) v
-    (to-flat-octets (to-bytes 2 +NUMBER_MARKER+) (encode-double value))))
+    (to-flat-octets +NUMBER_MARKER+ (encode-double value))))
 
 ;; boolean
 (defstruct (boolean-type (:include value-type))
@@ -112,7 +112,7 @@
   (make-boolean-type :value (/= (read-byte in) 0)))
 
 (defmethod encode ((v boolean-type))
-  (to-flat-octets (to-bytes 2 +BOOLEAN_MARKER+) (if (boolean-type-value v) 1 0)))
+  (to-flat-octets +BOOLEAN_MARKER+ (if (boolean-type-value v) 1 0)))
 
 ;; string
 (defstruct (string-type (:include value-type))
@@ -131,7 +131,7 @@
 
 (defmethod encode ((v string-type))
   (to-flat-octets
-   (to-bytes 2 +STRING_MARKER+)
+   +STRING_MARKER+
    (encode-string (string-type-value v))))
 
 ;; long string
@@ -144,7 +144,7 @@
 
 (defmethod encode ((v long-string-type))
   (to-flat-octets
-   (to-bytes 4 +LONG_STRING_MARKER+)
+   +LONG_STRING_MARKER+
    (encode-string (long-string-type-value v))))
 
 ;; XML document
@@ -157,7 +157,7 @@
 
 (defmethod encode ((v xml-document-type))
   (to-flat-octets
-   (to-bytes 4 +XML_DOCUMENT_MARKER+)
+   +XML_DOCUMENT_MARKER+
    (encode-string (xml-document-type-value v))))
 
 ;; object
@@ -174,10 +174,10 @@
 
 (defmethod encode ((v object-type))
   (to-flat-octets
-   (to-bytes 2 +OBJECT_MARKER+)
+   +OBJECT_MARKER+
    (loop FOR (key x) IN (object-type-value v)
 	 COLLECT (to-flat-octets (encode-string key) (encode x)))
-   (to-bytes 2 +OBJECT_END_MARKER+)))
+   +OBJECT_END_MARKER+))
 
 ;; typed object
 (defstruct (typed-object-type (:include value-type))
@@ -195,11 +195,11 @@
 
 (defmethod encode ((v typed-object-type))
   (to-flat-octets
-   (to-bytes 2 +TYPED_OBJECT_MARKER+)
+   +TYPED_OBJECT_MARKER+
    (encode-string (typed-object-type-class-name v))
    (loop FOR (key x) IN (typed-object-type-value v)
 	 COLLECT (to-flat-octets (encode-string key) (encode x)))
-   (to-bytes 2 +OBJECT_END_MARKER+)))
+   +OBJECT_END_MARKER+))
 
 
 ;; null
