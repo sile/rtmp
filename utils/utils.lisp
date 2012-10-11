@@ -69,7 +69,8 @@
 
 (defun show-log (fmt &rest args)
   (when *show-log*
-    (format *error-output* "~&;~v@t~?~%" (* 2 *log-nest*) fmt args)))
+    (format *error-output* "~&;~v@t~?~%" (* 2 *log-nest*) fmt args))
+  (values))
 
 (defmacro with-log-section ((name) &body body)
   `(when *show-log*
