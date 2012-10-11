@@ -12,6 +12,9 @@
 
                (:file "utils/package")
                (:file "utils/utils")
+               
+               (:file "const/package")
+               (:file "const/rtmp")
 
                (:file "amf0/package")
                (:file "amf0/marker")
@@ -21,5 +24,11 @@
 
                (:file "message/package")
                (:file "message/message")
+
+               (:file "client/package")
+               (:file "client/client")
+               
+               (:file "server/package")
+               (:file "server/server")
 
                (:file "rtmp")))
