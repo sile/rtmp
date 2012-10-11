@@ -59,3 +59,22 @@
   ;; TODO: wrote length check
   (write-sequence bytes out)
   (values))
+
+(defmacro with-output-to-bytes ((out) &body body)
+  `(flexi-streams:with-output-to-sequence (,out :element-type 'octet)
+     ,@body))
+
+(defparameter *show-log* t)
+(defparameter *log-nest* 0)
+
+(defun show-log (fmt &rest args)
+  (when *show-log*
+    (format *error-output* "~&;~v@t~?~%" (* 2 *log-nest*) fmt args)))
+
+(defmacro with-log-section ((name) &body body)
+  `(when *show-log*
+     (show-log "[~a]" ,name)
+     (prog1 (let ((*log-nest* (1+ *log-nest*)))
+              ,@body)
+       (show-log ""))))
+
