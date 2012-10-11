@@ -242,6 +242,48 @@
 		  (build-chunk 3 chunk-stream-id (subseq payload offset (min len (+ offset *default-chunk-size*)))))
 		))
 
+(defun ary-to-int (length offset ary)
+  (loop FOR i FROM 0 BELOW length
+		FOR j FROM offset 
+		SUM (ash (aref ary j) (* (- length i 1) 8))))
+
+(defun parse-acknowledge-windows-size-msg (msg)
+  (assert (= (chunk-msg-msg-type-id msg) 5) () "msg type must be 5: ~a" (chunk-msg-msg-type-id msg))
+  ;; size
+  (let ((size (ary-to-int 4 0 (chunk-msg-payload msg))))
+	(format t "~&; [5] ack-win-size=~a~%" size)
+	size))
+
+(defun parse-see-peer-bandwidth-msg (msg)
+  (assert (= (chunk-msg-msg-type-id msg) 6) () "msg type must be 6: ~a" (chunk-msg-msg-type-id msg))
+  (let* ((ary (chunk-msg-payload msg))
+		 (size (ary-to-int 4 0 ary))
+		 (limit-type (aref ary 4)))
+	(format t "~&; [6] ack-win-size=~a, limit-type=~a~%" size limit-type)
+	(values size limit-type)))
+
+(defun parse-stream-begin-msg (msg)
+  (assert (= (chunk-msg-msg-type-id msg) 4) () "msg type must be 4: ~a" (chunk-msg-msg-type-id msg))  
+  (let* ((ary (chunk-msg-payload msg))
+		 (event-type (ary-to-int 2 0 ary))
+		 (stream-id (ary-to-int 4 2 ary)))
+	(assert (= event-type 0) () "event type must be 0: ~a" event-type)
+	
+	(format t "~&; [4] stream-begin: stream-id=~a~%" stream-id)
+	stream-id))
+  
+(defun send-acknowledge-window-size (size out)
+  (let ((msg-type-id 5)
+		(msg-stream-id 0)  ; for control
+		(chunk-stream-id 2) ; for control
+		(timestamp 0)
+		(payload (to-bytes 4 size)))
+	
+	(dolist (data (build-chunks chunk-stream-id msg-type-id msg-stream-id timestamp payload))
+	  (write-sequence data out))
+	(force-output out))
+  t)
+
 (defun rtmp-cmd-connect (sock)
   (let ((io (socket-make-stream sock :input t :output t :element-type 'octet))
 	(msg-type-id 20)  ; for AMF0
@@ -249,19 +291,56 @@
 	(chunk-stream-id 44)
 	(timestamp 100)
 	(payload (rtmp-cmd-connect-bytes))
+
+	(win-size 0)
+	(begin-stream-id 0)
 	)
+	
+	;; send
+	(format t "~&; send 'connect'~%")
     (dolist (data (build-chunks chunk-stream-id msg-type-id msg-stream-id timestamp payload))
-      (write-sequence data io)
-      (write-sequence data out))
-	(force-output io))
-  t)
+      (write-sequence data io))
+	(force-output io)
+  
+	;; recv
+	(format t "~&; recv 'connect' response~%")
+	(let ((msg (make-chunk-msg)))
+	  
+	  ;; acknowledge window size
+	  (srv-read-message msg io)
+	  (setf win-size (parse-acknowledge-windows-size-msg msg))
+	  (setf (chunk-msg-payload msg) '())
+
+	  ;; see peer bandwidth
+	  (srv-read-message msg io)
+	  (parse-see-peer-bandwidth-msg msg)
+	  (setf (chunk-msg-payload msg) '())	  
+
+	  ;; send
+	  (format t "~&; send ack-win-size: ~a~%" win-size)
+	  (send-acknowledge-window-size win-size io)
+
+	  ;; recv
+	  ;; stream-begin
+	  (srv-read-message msg io)
+	  (setf begin-stream-id (parse-stream-begin-msg msg))
+	  (setf (chunk-msg-payload msg) '())	  
+
+	  ;; recv
+	  ;; command-message
+	  (srv-read-message msg io)	  
+	  (prog1 
+		  (parse-command-message msg)
+		(setf (chunk-msg-payload msg) '()))
+	  )
+	)
+  )
 
 #|
 command massage
  - message-type 20 for AMF0
  - message-type 17 for AMF3
 |#
-
 (define-symbol-macro cli 
   (progn (defparameter *cli* 
 	   ;;(make-connected-socket "localhost" 1935)

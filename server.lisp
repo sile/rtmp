@@ -158,6 +158,15 @@
       (write-sequence chunk-payload out)))
   t)
 
+(defun parse-command-message (msg)
+  (declare (ignore msg)) ; XXX:
+  (with-open-file (in "/tmp/chunk.tmp" :element-type 'octet)
+    (list (amf0::decode in)
+		  (amf0::decode in)
+		  (amf0::decode in)
+		  (ignore-errors (amf0::decode in))
+		  )))
+
 (define-symbol-macro lp
   (loop WITH server = srv
 		WITH chunk-msg = (make-chunk-msg)
