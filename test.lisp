@@ -232,9 +232,29 @@
     (to-flat-octets
      (amf0::encode (amf0::make-string-type :value name))
      (amf0::encode (amf0::make-number-type :value (coerce transaction-id 'double-float)))
-     (amf0::encode (assoc-to-object '())) ;;(amf0::make-null-type)) ; nullだと駄目？
+     (amf0::encode (amf0::make-null-type)) ; nullだと駄目？
      )))
 
+(defparameter *default-stream-name* "sample-stram")
+(defun rtmp-cmd-play-bytes ()
+  (let ((name "play")
+		(transaction-id 0)
+		(stream *default-stream-name*)
+		(start -2) ; default
+		(duration -1) ; default
+		(restart nil)
+		)
+    (to-flat-octets
+     (amf0::encode (amf0::make-string-type :value name))
+     (amf0::encode (amf0::make-number-type :value (coerce transaction-id 'double-float)))
+     (amf0::encode (amf0::make-null-type)) ; nullだと駄目？
+	 (amf0::encode (amf0::make-string-type :value stream))
+	 (amf0::encode (amf0::make-number-type :value (coerce start 'double-float)))
+	 (amf0::encode (amf0::make-number-type :value (coerce duration 'double-float)))
+	 (amf0::encode (amf0::make-boolean-type :value restart))
+     )))
+
+(defparameter +DEFAULT_CHUNK_SIZE+ 128)
 (defparameter *default-chunk-size* 128)
 
 (defun build-chunks (chunk-stream-id msg-type-id msg-stream-id timestamp payload &aux (len (length payload)))
@@ -257,7 +277,11 @@
 		SUM (ash (aref ary j) (* (- length i 1) 8))))
 
 (defun parse-acknowledge-windows-size-msg (msg)
-  (assert (= (chunk-msg-msg-type-id msg) 5) () "msg type must be 5: ~a" (chunk-msg-msg-type-id msg))
+  (unless (= (chunk-msg-msg-type-id msg) 5)
+	;; XXX: 暫定処置. もっと上の方でメッセージ種類によるディスパッチループを入れる
+	(print (parse-command-message msg))
+	(assert (= (chunk-msg-msg-type-id msg) 5) () "msg type must be 5: ~a" (chunk-msg-msg-type-id msg)))
+
   ;; size
   (let ((size (ary-to-int 4 0 (chunk-msg-payload msg))))
 	(format t "~&; [5] ack-win-size=~a~%" size)
@@ -271,8 +295,35 @@
 	(format t "~&; [6] ack-win-size=~a, limit-type=~a~%" size limit-type)
 	(values size limit-type)))
 
-(defun parse-stream-begin-msg (msg)
-  (assert (= (chunk-msg-msg-type-id msg) 4) () "msg type must be 4: ~a" (chunk-msg-msg-type-id msg))  
+(defun parse-set-chunk-size-msg (msg)
+  (unless (= (chunk-msg-msg-type-id msg) 1)
+	(print (parse-command-message msg))
+	(assert (= (chunk-msg-msg-type-id msg) 1) () "msg type must be 1: ~a" (chunk-msg-msg-type-id msg)))
+  (let* ((ary (chunk-msg-payload msg))
+		 (size (ary-to-int 4 0 ary)))
+	(format t "~&; [1] new-chunk-size=~a~%" size)
+	size))
+
+(defun parse-ctrl-stream-is-recorded-msg (msg)
+  (unless (= (chunk-msg-msg-type-id msg) 4)
+	;; XXX: 暫定処置. もっと上の方でメッセージ種類によるディスパッチループを入れる
+	(print (parse-command-message msg))
+	(assert (= (chunk-msg-msg-type-id msg) 4) () "msg type must be 4: ~a" (chunk-msg-msg-type-id msg)))
+
+  (let* ((ary (chunk-msg-payload msg))
+		 (event-type (ary-to-int 2 0 ary))
+		 (stream-id (ary-to-int 4 2 ary)))
+	(assert (= event-type 4) () "event type must be 4: ~a" event-type)
+	
+	(format t "~&; [4] stream-is-recorded: stream-id=~a~%" stream-id)
+	stream-id))
+
+(defun parse-ctrl-stream-begin-msg (msg)
+  (unless (= (chunk-msg-msg-type-id msg) 4)
+	;; XXX: 暫定処置. もっと上の方でメッセージ種類によるディスパッチループを入れる
+	(print (parse-command-message msg))
+	(assert (= (chunk-msg-msg-type-id msg) 4) () "msg type must be 4: ~a" (chunk-msg-msg-type-id msg)))
+
   (let* ((ary (chunk-msg-payload msg))
 		 (event-type (ary-to-int 2 0 ary))
 		 (stream-id (ary-to-int 4 2 ary)))
@@ -332,7 +383,7 @@
 	  ;; recv
 	  ;; stream-begin
 	  (srv-read-message msg io)
-	  (setf begin-stream-id (parse-stream-begin-msg msg))
+	  (setf begin-stream-id (parse-ctrl-stream-begin-msg msg))
 	  (setf (chunk-msg-payload msg) '())	  
 
 	  ;; recv
@@ -373,12 +424,58 @@
 	)
   )
 
+(defun rtmp-cmd-play (sock &optional (msg (make-chunk-msg)))
+  (let ((io (socket-make-stream sock :input t :output t :element-type 'octet))
+		(msg-type-id 20)  ; for AMF0
+		(msg-stream-id 1) ; 35)
+		(chunk-stream-id 46)
+		(timestamp 300)
+		(payload (rtmp-cmd-play-bytes))
+		
+		(stream-id 0)
+		(recv-chunk-size 0)
+		)
+	
+	;; send
+	(format t "~&; send 'play'~%")
+    (dolist (data (build-chunks chunk-stream-id msg-type-id msg-stream-id timestamp payload))
+      (write-sequence data io))
+	(force-output io)
+  
+	;; recv
+	(format t "~&; recv 'play' response~%")
+	(let ((msg msg))
+	  ;; SetChunkSize
+	  (srv-read-message msg io)	 
+	  (setf recv-chunk-size (- (parse-set-chunk-size-msg msg) 
+							   12))
+	  (setf (chunk-msg-per-msg-len msg) recv-chunk-size)
+	  (setf (chunk-msg-payload msg) '())
+
+	  ;; StreamIsRecorded
+	  (srv-read-message msg io)	 
+	  (setf stream-id (parse-ctrl-stream-is-recorded-msg msg))
+	  (setf (chunk-msg-payload msg) '())	  
+	)
+  ))
+
 (defun test ()
+  (setf *default-chunk-size* +DEFAULT_CHUNK_SIZE+)
   (let ((msg (make-chunk-msg)))
 	cls
 	(rtmp-handshake cli)
 	(print (rtmp-cmd-connect *cli* msg))
 	(rtmp-cmd-create-stream *cli* msg)
+  ))
+
+(defun test-play ()
+  (setf *default-chunk-size* +DEFAULT_CHUNK_SIZE+)
+  (let ((msg (make-chunk-msg)))
+	cls
+	(rtmp-handshake cli)
+	(print (rtmp-cmd-connect *cli* msg))
+	(print (rtmp-cmd-create-stream *cli* msg))
+	(rtmp-cmd-play *cli* msg)
   ))
 
 #|

@@ -206,19 +206,19 @@
 (defstruct (null-type (:include value-type)))
 
 (defmethod encode ((v null-type))
-  (to-flat-octets (to-bytes 2 +NULL_MARKER+)))
+  (to-flat-octets +NULL_MARKER+))
 
 ;; undefined
 (defstruct (undefined-type (:include value-type)))
 
 (defmethod encode ((v undefined-type))
-  (to-flat-octets (to-bytes 2 +UNDEFINED_MARKER+)))
+  (to-flat-octets +UNDEFINED_MARKER+))
 
 ;; unsupported
 (defstruct (unsupported-type (:include value-type)))
 
 (defmethod encode ((v unsupported-type))
-  (to-flat-octets (to-bytes 2 +UNSUPPORTED_MARKER+)))
+  (to-flat-octets +UNSUPPORTED_MARKER+))
 
 ;; reference
 (defstruct (reference-type (:include value-type))

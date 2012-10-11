@@ -161,9 +161,9 @@
 (defun parse-command-message (msg)
   (declare (ignore msg)) ; XXX:
   (with-open-file (in "/tmp/chunk.tmp" :element-type 'octet)
-    (list (amf0::decode in)
-		  (amf0::decode in)
-		  (amf0::decode in)
+    (list (ignore-errors (amf0::decode in))
+		  (ignore-errors (amf0::decode in))
+		  (ignore-errors (amf0::decode in))
 		  (ignore-errors (amf0::decode in))
 		  )))
 
