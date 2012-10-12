@@ -33,6 +33,12 @@
     (force-output io)
     ))
 
+(defun rand-str (size)
+  (map 'string #'identity
+       (loop REPEAT size
+             COLLECT (char #1="abcdefghijlkmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                           (random (length #1#))))))
+
 (defun start (io)
   (handshake io :zero 67436545) ; XXX: magic-number
   
@@ -66,7 +72,16 @@
            (force-output io)))
 
         (rtmp.message:publish
-         :ignore) ; XXX:
+         (let ((stream-id (rtmp.message::command-base-stream-id msg))
+               (params `(("level" "status")
+                         ("code" "NetStream.Publish.Start")
+                         ("description" "livestream is now published.")
+                         ("clientid" ,(rand-str 8)))))
+           (rtmp.message:write io (rtmp.message:on-status 0
+                                                          :field2 params 
+                                                          :stream-id stream-id
+                                                          :timestamp 0))
+           (force-output io)))
 
         (rtmp.message:delete-stream
          :ignore)

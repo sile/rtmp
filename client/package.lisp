@@ -3,6 +3,7 @@
   (:export handshake
            connect
            create-stream
+           publish
            play
            ))
 (in-package :rtmp.client)

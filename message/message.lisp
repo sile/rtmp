@@ -151,6 +151,46 @@
     (princ-to-string command-object)))
 
 ;; TODO: 仕様 or 実装 を探す
+(defstruct (on-status (:include command-base))
+  field1 
+  field2)
+
+(defun on-status (transaction-id &key (field1 :null)
+                                      (field2 :null)
+                                      (timestamp (get-internal-real-time))
+                                      (stream-id (next-message-stream-id))
+                                      (amf-version 0))
+  (declare ((member 0 3) amf-version))
+  (assert (= amf-version 0) () "unsupported AMF version: ~a" amf-version)
+
+  (make-on-status :type-id +MESSAGE_TYPE_ID_COMMAND_AMF0+
+                  :stream-id stream-id
+                  :timestamp timestamp
+                  :name "onStatus"
+                  :transaction-id transaction-id
+                  :field1 field1
+                  :field2 field2))
+
+(defmethod write-command (out (m on-status))
+  (with-slots (field1 field2) m
+    (rtmp.amf0:encode field1 out)
+    (rtmp.amf0:encode field2 out)))
+
+(defun parse-command-on-status (in transaction-id stream-id timestamp)
+  (let ((obj1 (rtmp.amf0:decode in))
+        (obj2 (rtmp.amf0:decode in)))
+    (assert (not (listen in)) () "stream is n't consumed")
+    (on-status transaction-id 
+               :stream-id stream-id
+               :timestamp timestamp
+               :field1 obj1
+               :field2 obj2)))
+
+(defmethod show-fields ((m on-status))
+  (with-slots (field1 field2) m
+    (princ-to-string (list field1 field2))))
+
+;; TODO: 仕様 or 実装 を探す
 (defstruct (fcpublish (:include command-base))
   field1 
   field2)
@@ -385,6 +425,7 @@
         (:onBWDone (parse-command-on-bandwidth-done in transaction-id stream-id timestamp))
         (:releaseStream (parse-command-release-stream in transaction-id stream-id timestamp))
         (:FCPublish (parse-command-fcpublish in transaction-id stream-id timestamp))
+        (:onStatus (parse-command-on-status in transaction-id stream-id timestamp))
         ))))
 
 ;;; user control
