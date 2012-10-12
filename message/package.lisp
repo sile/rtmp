@@ -3,6 +3,7 @@
   (:shadow write read)
   (:export ;;; command
            connect
+           _result
 
            ;;; protocol control
            ack-win-size

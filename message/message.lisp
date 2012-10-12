@@ -21,8 +21,8 @@
   (prog1 *message-stream-id*
     (incf *message-stream-id*)))
 
-(defconstant +MESSAGE_TYPE_ID_AMF0+ 20)
-(defconstant +MESSAGE_TYPE_ID_AMF3+ 17)
+(defconstant +MESSAGE_TYPE_ID_COMMAND_AMF0+ 20)
+(defconstant +MESSAGE_TYPE_ID_COMMAND_AMF3+ 17)
 
 ;;;; message
 (defstruct message-base
@@ -37,6 +37,46 @@
   (name           t :type string)
   (transaction-id t :type number))
 
+(defstruct (_result (:include command-base))
+  (properties  t :type list-map)
+  (information t :type list-map))
+
+(defun _result (transaction-id properties information 
+                &key (timestamp (get-internal-real-time))
+                     (stream-id (next-message-stream-id))
+                     (amf-version 0))
+  (declare ((member 0 3) amf-version))
+  (assert (= amf-version 0) () "unsupported AMF version: ~a" amf-version)
+
+  (make-_result :type-id +MESSAGE_TYPE_ID_COMMAND_AMF0+
+                :stream-id stream-id
+                :timestamp timestamp
+                :name "_result"
+                :transaction-id transaction-id
+                :properties properties
+                :information information))
+
+(defmethod show ((m _result))
+  (with-slots (type-id stream-id timestamp name transaction-id properties information) m
+    (let ((*print-pretty* nil))
+      (format nil "(~s \"~d:~d:~d\" ~d (:PROPS ~s) (:INFO ~s))" 
+              name type-id stream-id timestamp 
+              transaction-id properties information))))
+
+(defmethod write-command (out (m _result))
+  (with-slots (properties information) m
+    (rtmp.amf0:encode `(:map ,properties) out)
+    (rtmp.amf0:encode `(:map ,information) out)))
+
+(defun parse-command-_result (in transaction-id stream-id timestamp)
+  (let ((properties (rtmp.amf0:decode in))
+        (information (rtmp.amf0:decode in)))
+    (declare (rtmp.amf0:object-type properties information))
+
+    (_result transaction-id (second properties) (second information)
+             :stream-id stream-id
+             :timestamp timestamp)))
+
 (defstruct (connect (:include command-base))
   (command-object t :type list-map)
   (optional-args  t :type list-map))
@@ -48,7 +88,7 @@
   (declare ((member 0 3) amf-version))
   (assert (= amf-version 0) () "unsupported AMF version: ~a" amf-version)
 
-  (make-connect :type-id (if (= amf-version 0) +MESSAGE_TYPE_ID_AMF0+ +MESSAGE_TYPE_ID_AMF3+)
+  (make-connect :type-id +MESSAGE_TYPE_ID_COMMAND_AMF0+
                 :stream-id stream-id
                 :timestamp timestamp
                 :name "connect"
@@ -74,17 +114,43 @@
          (with-slots (type-id timestamp stream-id) ,m
            (write-chunks ,out ,chunk-size ,chunk-stream-id type-id stream-id timestamp payload))))))
 
+(defmethod write-command (out (m connect))
+  (with-slots (command-object optional-args) m
+    (rtmp.amf0:encode `(:map ,command-object) out)
+    (when optional-args
+      (rtmp.amf0:encode `(:map ,optional-args) out))))
      
-(defmethod write (out (m connect) &key (chunk-size +DEFAULT_CHUNK_SIZE+)
-                                       (chunk-stream-id (next-chunk-stream-id)))
+(defmethod write (out (m command-base) &key (chunk-size +DEFAULT_CHUNK_SIZE+)
+                                            (chunk-stream-id (next-chunk-stream-id)))
   (write-impl (out m :chunk-size chunk-size
                      :chunk-stream-id chunk-stream-id)
-    (with-slots (name transaction-id command-object optional-args) m
+    (with-slots (name transaction-id) m
       (rtmp.amf0:encode name out) ; TODO: amf3にも対応
       (rtmp.amf0:encode transaction-id out)
-      (rtmp.amf0:encode `(:map ,command-object) out)
-      (when optional-args
-        (rtmp.amf0:encode `(:map ,optional-args) out)))))
+      (write-command out m))))
+
+(defun parse-command-connect (in transaction-id stream-id timestamp)
+  (declare (ignore transaction-id))
+  (let ((command-object (rtmp.amf0:decode in))
+        (optional-args  (rtmp.amf0:decode in)))
+    (declare (rtmp.amf0:object-type command-object optional-args))
+
+    (connect (second command-object )
+             :stream-id stream-id
+             :timestamp timestamp
+             :optional-args (second optional-args))))
+
+(defun parse-command (payload stream-id timestamp amf-version)
+  (declare (ignore amf-version))
+
+  (with-input-from-bytes (in payload)
+    (let* ((command-name   (rtmp.amf0:decode in))
+           (transaction-id (rtmp.amf0:decode in))
+           (command (intern (string-upcase command-name) :keyword))) ; XXX: gc
+      (ecase command
+        (:connect (parse-command-connect in transaction-id stream-id timestamp))
+        (:_result (parse-command-_result in transaction-id stream-id timestamp))
+        ))))
 
 ;;; user control
 (eval-when (:compile-toplevel :load-toplevel :execute)
@@ -305,11 +371,16 @@
       (values message-type-id timestamp message-stream-id payload))))
 
 (defun read (io state)
-  (multiple-value-bind (type timestamp stream-id payload)
-                       (read-message-chunks io state)
-    (ecase type
-      (#. +MESSAGE_TYPE_ID_ACK_WINDOW_SIZE+ (parse-ack-win-size payload stream-id timestamp))
-      (#. +MESSAGE_TYPE_ID_SET_PEER_BANDWIDTH+ (parse-set-peer-bandwidth payload stream-id timestamp))
-      (#. +MESSAGE_TYPE_ID_UCM+ (parse-user-control payload stream-id timestamp))
-      )
-  ))
+  (with-log-section ("read-message")
+    (multiple-value-bind (type timestamp stream-id payload)
+                         (read-message-chunks io state)
+      (let ((msg 
+             (ecase type
+               (#. +MESSAGE_TYPE_ID_ACK_WINDOW_SIZE+ (parse-ack-win-size payload stream-id timestamp))
+               (#. +MESSAGE_TYPE_ID_SET_PEER_BANDWIDTH+ (parse-set-peer-bandwidth payload stream-id timestamp))
+               (#. +MESSAGE_TYPE_ID_UCM+ (parse-user-control payload stream-id timestamp))
+               (#. +MESSAGE_TYPE_ID_COMMAND_AMF0+ (parse-command payload stream-id timestamp 0))
+               (#. +MESSAGE_TYPE_ID_COMMAND_AMF3+ (error "unsupported message-type: ~a" type))
+               )))
+        (show-log "message: ~a" (show msg))
+        msg))))
