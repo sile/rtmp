@@ -14,6 +14,9 @@
            fcpublish
            on-status
 
+           ;;; data
+           data-base
+
            ;;; protocol control
            set-chunk-size
            ack-win-size

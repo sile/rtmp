@@ -84,7 +84,10 @@
            (force-output io)))
 
         (rtmp.message:delete-stream
-         :ignore)
+         :ignore) ; TODO
+
+        (rtmp.message:data-base
+         :ignore) ; TODO
 
         )))
   

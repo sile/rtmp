@@ -21,14 +21,54 @@
   (prog1 *message-stream-id*
     (incf *message-stream-id*)))
 
-(defconstant +MESSAGE_TYPE_ID_COMMAND_AMF0+ 20)
-(defconstant +MESSAGE_TYPE_ID_COMMAND_AMF3+ 17)
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (defconstant +MESSAGE_TYPE_ID_COMMAND_AMF0+ 20)
+  (defconstant +MESSAGE_TYPE_ID_COMMAND_AMF3+ 17)
+
+  (defconstant +MESSAGE_TYPE_ID_DATA_AMF0+ 18)
+  (defconstant +MESSAGE_TYPE_ID_DATA_AMF3+ 15)
+  )
+
 
 ;;;; message
 (defstruct message-base
   (type-id   0 :type (unsigned-byte 8))
   (stream-id 0 :type (unsigned-byte 32))
   (timestamp 0 :type (unsigned-byte 32)))
+
+;;;; data
+(defstruct (data-base (:include message-base))
+  data)
+
+(defun data-base (data &key (timestamp (get-internal-real-time)) (stream-id (next-message-stream-id)))
+  (make-data-base :data data
+                  :type-id +MESSAGE_TYPE_ID_DATA_AMF0+ ; XXX:
+                  :timestamp timestamp
+                  :stream-id stream-id))
+  
+;; TODO: 正確なフォーマットを確認
+(defun parse-data (payload stream-id timestamp amf-version)
+  (declare (ignore amf-version))
+
+  (with-input-from-bytes (in payload)
+    (let ((data (loop WHILE (listen in) COLLECT (rtmp.amf0:decode in))))
+      (data-base data 
+                 :timestamp timestamp
+                 :stream-id stream-id))))
+
+(defmethod show ((m data-base))
+  (with-slots (type-id stream-id timestamp data) m
+    (let ((*print-pretty* nil))
+      (format nil "(~s \"~d:~d:~d\" ~s)"
+              "data" type-id stream-id timestamp data))))
+
+(defmethod write (out (m data-base) &key (chunk-size +DEFAULT_CHUNK_SIZE+)
+                                         (chunk-stream-id +CHUNK_STREAM_ID_PCM+))
+  (write-impl (out m :chunk-size chunk-size
+                     :chunk-stream-id chunk-stream-id)
+    (with-slots (data) m
+      (dolist (x data)
+        (rtmp.amf0:encode x out)))))
 
 ;;;; command
 (defconstant +CONNECT_TRANSACIONT_ID+ 1)
@@ -683,6 +723,8 @@
                (#. +MESSAGE_TYPE_ID_UCM+ (parse-user-control payload stream-id timestamp))
                (#. +MESSAGE_TYPE_ID_COMMAND_AMF0+ (parse-command payload stream-id timestamp 0))
                (#. +MESSAGE_TYPE_ID_COMMAND_AMF3+ (error "unsupported message-type: ~a" type))
+               (#. +MESSAGE_TYPE_ID_DATA_AMF0+ (parse-data payload stream-id timestamp 0))
+               (#. +MESSAGE_TYPE_ID_DATA_AMF3+ (error "unsupported message-type: ~a" type))
                )))
         (show-log "message: ~a" (show msg))
         msg))))
