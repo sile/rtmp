@@ -3,6 +3,7 @@
 (defparameter *default-ack-win-size* 2500000)
 
 (defun handle-connect (io state)
+  (declare (ignorable state))
   (with-log-section ("handle-connect")
     (rtmp.message:write io (rtmp.message:ack-win-size *default-ack-win-size*))
     (rtmp.message:write io (rtmp.message:set-peer-bandwidth *default-ack-win-size* 2))
@@ -11,8 +12,9 @@
     (rtmp.message:write io (rtmp.message:set-chunk-size 1024))
     (force-output io)
 
-    (let ((msg (rtmp.message:read io state)))
-      (assert (typep msg 'rtmp.message:ack-win-size) () "not ack-win-size"))
+;; for FMLE
+;;    (let ((msg (rtmp.message:read io state)))
+;;      (assert (typep msg 'rtmp.message:ack-win-size) () "not ack-win-size"))
       
     (let ((props '(("fmsVer" "FMS/4,5,0,297")
                    ("capabilities" 255)
@@ -39,8 +41,21 @@
           FOR msg = (rtmp.message:read io state)
       DO
       (etypecase msg
-        (rtmp.message:connect (handle-connect io state))
-        (rtmp.message:ack-win-size :ignore) ; TODO:
+        (rtmp.message:connect 
+         (handle-connect io state))
+        
+        (rtmp.message:ack-win-size 
+         :ignore) ; TODO:
+
+        (rtmp.message:set-chunk-size
+         (setf (rtmp.message::state-chunk-size state) (rtmp.message::set-chunk-size-size msg)))
+        
+        (rtmp.message:release-stream
+         (show-log "recv releaseStream# stream-id=~s" (rtmp.message::release-stream-field2 msg)))
+
+        (rtmp.message:fcpublish
+         (show-log "recv FCPublish# stream-id=~s" (rtmp.message::fcpublish-field2 msg)))
+        
         )))
   
   (values))

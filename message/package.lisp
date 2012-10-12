@@ -6,6 +6,8 @@
            _result
            
            on-bandwidth-done
+           release-stream
+           fcpublish
 
            ;;; protocol control
            set-chunk-size

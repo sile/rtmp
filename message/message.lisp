@@ -38,6 +38,85 @@
   (transaction-id t :type number))
 
 ;; TODO: 仕様 or 実装 を探す
+(defstruct (fcpublish (:include command-base))
+  field1 
+  field2)
+
+(defun fcpublish (transaction-id &key (field1 :null)
+                                      (field2 :null)
+                                      (timestamp (get-internal-real-time))
+                                      (stream-id (next-message-stream-id))
+                                      (amf-version 0))
+  (declare ((member 0 3) amf-version))
+  (assert (= amf-version 0) () "unsupported AMF version: ~a" amf-version)
+
+  (make-fcpublish :type-id +MESSAGE_TYPE_ID_COMMAND_AMF0+
+                  :stream-id stream-id
+                  :timestamp timestamp
+                  :name "FCPublish"
+                  :transaction-id transaction-id
+                  :field1 field1
+                  :field2 field2))
+
+(defmethod write-command (out (m fcpublish))
+  (with-slots (field1 field2) m
+    (rtmp.amf0:encode field1 out)
+    (rtmp.amf0:encode field2 out)))
+
+(defun parse-command-fcpublish (in transaction-id stream-id timestamp)
+  (let ((obj1 (rtmp.amf0:decode in))
+        (obj2 (rtmp.amf0:decode in)))
+    (assert (not (listen in)) () "stream is n't consumed")
+    (fcpublish transaction-id 
+               :stream-id stream-id
+               :timestamp timestamp
+               :field1 obj1
+               :field2 obj2)))
+
+;; TODO: 仕様 or 実装 を探す
+(defstruct (release-stream (:include command-base))
+  field1 ; XXX:
+  field2 
+  )
+
+(defun release-stream (transaction-id &key (field1 :null)
+                                           (field2 "livestream")
+                                           (timestamp (get-internal-real-time))
+                                           (stream-id (next-message-stream-id))
+                                           (amf-version 0))
+  (declare ((member 0 3) amf-version))
+  (assert (= amf-version 0) () "unsupported AMF version: ~a" amf-version)
+
+  (make-release-stream :type-id +MESSAGE_TYPE_ID_COMMAND_AMF0+
+                       :stream-id stream-id
+                       :timestamp timestamp
+                       :name "releaseStream"
+                       :transaction-id transaction-id
+                       :field1 field1
+                       :field2 field2))
+
+
+(defmethod show ((m command-base))
+  (with-slots (type-id stream-id timestamp name transaction-id) m
+    (let ((*print-pretty* nil))
+      (format nil "(~s \"~d:~d:~d\" ~d)"
+              name type-id stream-id timestamp transaction-id))))
+
+(defmethod write-command (out (m release-stream))
+  (with-slots (field1 field2) m
+    (rtmp.amf0:encode field1 out)
+    (rtmp.amf0:encode field2 out)))
+
+(defun parse-command-release-stream (in transaction-id stream-id timestamp)
+  (let ((obj1 (rtmp.amf0:decode in))
+        (obj2 (rtmp.amf0:decode in)))
+    (release-stream transaction-id 
+                    :stream-id stream-id
+                    :timestamp timestamp
+                    :field1 obj1
+                    :field2 obj2)))
+
+;; TODO: 仕様 or 実装 を探す
 (defstruct (on-bandwidth-done (:include command-base))
   field1 ; XXX:
   )
@@ -52,15 +131,9 @@
   (make-on-bandwidth-done :type-id +MESSAGE_TYPE_ID_COMMAND_AMF0+
                           :stream-id stream-id
                           :timestamp timestamp
-                          :name "onbwdone"
+                          :name "onBWDone" 
                           :transaction-id transaction-id
                           :field1 field1))
-
-(defmethod show ((m on-bandwidth-done))
-  (with-slots (type-id stream-id timestamp name transaction-id) m
-    (let ((*print-pretty* nil))
-      (format nil "(~s \"~d:~d:~d\" ~d)"
-              name type-id stream-id timestamp transaction-id ))))
 
 (defmethod write-command (out (m on-bandwidth-done))
   (with-slots (field1) m
@@ -184,10 +257,13 @@
     (let* ((command-name   (rtmp.amf0:decode in))
            (transaction-id (rtmp.amf0:decode in))
            (command (intern (string-upcase command-name) :keyword))) ; XXX: gc
+      (show-log "command-name# ~s" command-name)
       (ecase command
         (:connect (parse-command-connect in transaction-id stream-id timestamp))
         (:_result (parse-command-_result in transaction-id stream-id timestamp))
-        (:onbwdone (parse-command-on-bandwidth-done in transaction-id stream-id timestamp))
+        (:onBWDone (parse-command-on-bandwidth-done in transaction-id stream-id timestamp))
+        (:releaseStream (parse-command-release-stream in transaction-id stream-id timestamp))
+        (:FCPublish (parse-command-fcpublish in transaction-id stream-id timestamp))
         ))))
 
 ;;; user control
