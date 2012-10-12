@@ -112,6 +112,7 @@
        (let ((payload (with-output-to-bytes (,out)
                         ,@body)))
          (with-slots (type-id timestamp stream-id) ,m
+           ;; TODO: chunkはchunk-streamっぽいものを使って、使いまわすようにする (fmt0の数が減る)
            (write-chunks ,out ,chunk-size ,chunk-stream-id type-id stream-id timestamp payload))))))
 
 (defmethod write-command (out (m connect))
@@ -132,7 +133,7 @@
 (defun parse-command-connect (in transaction-id stream-id timestamp)
   (declare (ignore transaction-id))
   (let ((command-object (rtmp.amf0:decode in))
-        (optional-args  (rtmp.amf0:decode in)))
+        (optional-args  (when (listen in) (rtmp.amf0:decode in))))
     (declare (rtmp.amf0:object-type command-object optional-args))
 
     (connect (second command-object )
@@ -199,6 +200,7 @@
 
 ;;; program control
 (eval-when (:compile-toplevel :load-toplevel :execute)
+  (defconstant +MESSAGE_TYPE_ID_SET_CHUNK_SIZE+ 1)
   (defconstant +MESSAGE_TYPE_ID_ACK_WINDOW_SIZE+ 5)
   (defconstant +MESSAGE_TYPE_ID_SET_PEER_BANDWIDTH+ 6)
   )
@@ -208,6 +210,30 @@
 
 (defstruct (protocol-control-base (:include message-base)))
 
+(defstruct (set-chunk-size (:include protocol-control-base))
+  (size 0 :type (unsigned-byte 32)))
+
+(defun set-chunk-size (size &key (timestamp (get-internal-real-time)))
+  (make-set-chunk-size :type-id +MESSAGE_TYPE_ID_SET_CHUNK_SIZE+
+                       :stream-id +MESSAGE_STREAM_ID_PCM+
+                       :timestamp timestamp
+                       :size size))
+
+(defmethod write (out (m set-chunk-size)  &key (chunk-size +DEFAULT_CHUNK_SIZE+)
+                                               (chunk-stream-id +CHUNK_STREAM_ID_PCM+))
+  (write-impl (out m :chunk-size chunk-size
+                     :chunk-stream-id chunk-stream-id)
+    (write-uint 4 (set-chunk-size-size m) out)))
+
+(defun parse-set-chunk-size (payload stream-id timestamp)
+  (declare (ignore stream-id))
+  (let ((size (read-uint-from-bytes 4 payload)))
+    (set-chunk-size size :timestamp timestamp)))
+
+(defmethod show ((m set-chunk-size))
+  (with-slots (type-id size) m
+    (format nil "(~s \"~d\" size=~d)" "set-chunk-size" type-id size)))
+  
 (defstruct (ack-win-size (:include protocol-control-base))
   (size 0 :type (unsigned-byte 32)))
 
@@ -376,6 +402,7 @@
                          (read-message-chunks io state)
       (let ((msg 
              (ecase type
+               (#. +MESSAGE_TYPE_ID_SET_CHUNK_SIZE+ (parse-set-chunk-size payload stream-id timestamp))
                (#. +MESSAGE_TYPE_ID_ACK_WINDOW_SIZE+ (parse-ack-win-size payload stream-id timestamp))
                (#. +MESSAGE_TYPE_ID_SET_PEER_BANDWIDTH+ (parse-set-peer-bandwidth payload stream-id timestamp))
                (#. +MESSAGE_TYPE_ID_UCM+ (parse-user-control payload stream-id timestamp))
