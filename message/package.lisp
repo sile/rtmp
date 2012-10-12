@@ -4,7 +4,9 @@
   (:export ;;; command
            connect
            _result
-           
+           _error
+           create-stream
+
            on-bandwidth-done
            release-stream
            fcpublish

@@ -37,6 +37,38 @@
   (name           t :type string)
   (transaction-id t :type number))
 
+(defstruct (create-stream (:include command-base))
+  (command-object t :type (or list-map (member :null))))
+
+(defun create-stream (transaction-id command-object &key (timestamp (get-internal-real-time))
+                                                         (stream-id 0) ; use default channel
+                                                         (amf-version 0))
+  (declare ((member 0 3) amf-version))
+  (assert (= amf-version 0) () "unsupported AMF version: ~a" amf-version)
+
+  (make-create-stream :type-id +MESSAGE_TYPE_ID_COMMAND_AMF0+
+                      :stream-id stream-id
+                      :timestamp timestamp
+                      :name "createStream"
+                      :transaction-id transaction-id
+                      :command-object command-object))
+
+(defmethod write-command (out (m create-stream))
+  (with-slots (command-object) m
+    (rtmp.amf0:encode command-object out)))
+
+(defun parse-command-create-stream (in transaction-id stream-id timestamp)
+  (let ((obj (rtmp.amf0:decode in)))
+    (assert (not (listen in)) () "stream is n't consumed")
+    (create-stream transaction-id 
+                   obj
+                   :stream-id stream-id
+                   :timestamp timestamp)))
+
+(defmethod show-fields ((m create-stream))
+  (with-slots (command-object) m
+    (princ-to-string command-object)))
+
 ;; TODO: 仕様 or 実装 を探す
 (defstruct (fcpublish (:include command-base))
   field1 
@@ -96,11 +128,15 @@
                        :field2 field2))
 
 
+(defmethod show-fields ((m command-base))
+  (declare (ignore m))
+  "")
+
 (defmethod show ((m command-base))
   (with-slots (type-id stream-id timestamp name transaction-id) m
     (let ((*print-pretty* nil))
-      (format nil "(~s \"~d:~d:~d\" ~d)"
-              name type-id stream-id timestamp transaction-id))))
+      (format nil "(~s \"~d:~d:~d\" ~d ~a)"
+              name type-id stream-id timestamp transaction-id (show-fields m)))))
 
 (defmethod write-command (out (m release-stream))
   (with-slots (field1 field2) m
@@ -147,8 +183,8 @@
                        :field1 obj)))
 
 (defstruct (_result (:include command-base))
-  (properties  t :type list-map)
-  (information t :type list-map))
+  (properties  t :type (or list-map (member :null)))
+  (information t :type t))
 
 (defun _result (transaction-id properties information 
                 &key (timestamp (get-internal-real-time))
@@ -174,8 +210,8 @@
 
 (defmethod write-command (out (m _result))
   (with-slots (properties information) m
-    (rtmp.amf0:encode `(:map ,properties) out)
-    (rtmp.amf0:encode `(:map ,information) out)))
+    (rtmp.amf0:encode (if (listp properties) `(:map ,properties) properties) out) ; XXX:
+    (rtmp.amf0:encode (if (listp information) `(:map ,information) information) out)))
 
 (defun parse-command-_result (in transaction-id stream-id timestamp)
   (let ((properties (rtmp.amf0:decode in))
@@ -191,7 +227,7 @@
   (optional-args  t :type list-map))
 
 (defun connect (command-object &key (timestamp (get-internal-real-time))
-                                    (stream-id (next-message-stream-id))
+                                    (stream-id 0) ; use default channel (net.connection)
                                     optional-args 
                                     (amf-version 0))
   (declare ((member 0 3) amf-version))
@@ -260,6 +296,7 @@
       (show-log "command-name# ~s" command-name)
       (ecase command
         (:connect (parse-command-connect in transaction-id stream-id timestamp))
+        (:createStream (parse-command-create-stream in transaction-id stream-id timestamp))
         (:_result (parse-command-_result in transaction-id stream-id timestamp))
         (:onBWDone (parse-command-on-bandwidth-done in transaction-id stream-id timestamp))
         (:releaseStream (parse-command-release-stream in transaction-id stream-id timestamp))
