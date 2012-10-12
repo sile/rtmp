@@ -6,6 +6,7 @@
 
            ;;; protocol control
            ack-win-size
+           set-peer-bandwidth
 
            show
            make-initial-state

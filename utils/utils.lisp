@@ -65,12 +65,12 @@
   `(flexi-streams:with-output-to-sequence (,out :element-type 'octet)
      ,@body))
 
-(defmacro with-input-from-bytes ((in bytes) &body body)
-  `(flexi-streams:with-input-from-sequence (,in ,bytes)
+(defmacro with-input-from-bytes ((in bytes &key (start 0)) &body body)
+  `(flexi-streams:with-input-from-sequence (,in ,bytes :start ,start)
      ,@body))
 
-(defmacro read-uint-from-bytes (byte-width bytes &key (endian :big))
-  `(with-input-from-bytes (in ,bytes)
+(defmacro read-uint-from-bytes (byte-width bytes &key (endian :big) (start 0))
+  `(with-input-from-bytes (in ,bytes :start ,start)
      (read-uint ,byte-width in :endian ,endian)))
 
 (defparameter *show-log* t)

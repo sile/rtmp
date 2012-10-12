@@ -59,7 +59,7 @@
 (defmethod show ((m connect))
   (with-slots (type-id stream-id timestamp name transaction-id command-object optional-args) m
     (let ((*print-pretty* nil))
-      (format nil "(~s:~d:~d:~d ~d (:PARAMS ~s) (:OPTS ~s))" 
+      (format nil "(~s \"~d:~d:~d\" ~d (:PARAMS ~s) (:OPTS ~s))" 
               name type-id stream-id timestamp 
               transaction-id command-object optional-args))))
 
@@ -88,7 +88,9 @@
 
 ;;; control
 (eval-when (:compile-toplevel :load-toplevel :execute)
-  (defconstant +MESSAGE_TYPE_ID_ACK_WINDOW_SIZE+ 5))
+  (defconstant +MESSAGE_TYPE_ID_ACK_WINDOW_SIZE+ 5)
+  (defconstant +MESSAGE_TYPE_ID_SET_PEER_BANDWIDTH+ 6)
+  )
 
 (defconstant +CHUNK_STREAM_ID_PCM+ 2)
 (defconstant +MESSAGE_STREAM_ID_PCM+ 0)
@@ -106,7 +108,7 @@
 
 (defmethod show ((m ack-win-size))
   (with-slots (type-id size) m
-    (format nil "(~s:~d ~d)" "ack-win-size" type-id size)))
+    (format nil "(~s \"~d\" size=~d)" "ack-win-size" type-id size)))
 
 (defmethod write (out (m ack-win-size)  &key (chunk-size +DEFAULT_CHUNK_SIZE+)
                                              (chunk-stream-id +CHUNK_STREAM_ID_PCM+))
@@ -114,9 +116,39 @@
                      :chunk-stream-id chunk-stream-id)
     (write-uint 4 (ack-win-size-size m) out)))
 
-(defun parse-ack-win-size (payload timestamp)
+(defun parse-ack-win-size (payload stream-id timestamp)
+  (declare (ignore stream-id))
   (let ((size (read-uint-from-bytes 4 payload)))
     (ack-win-size size :timestamp timestamp)))
+
+(defstruct (set-peer-bandwidth (:include protocol-control-base))
+  (size       0 :type (unsigned-byte 32))
+  (limit-type 0 :type (unsigned-byte 8)))
+
+(defun set-peer-bandwidth (ack-win-size limit-type &key (timestamp (get-internal-real-time)))
+  (make-set-peer-bandwidth :type-id +MESSAGE_TYPE_ID_SET_PEER_BANDWIDTH+
+                           :stream-id +MESSAGE_STREAM_ID_PCM+
+                           :timestamp timestamp
+                           :size ack-win-size
+                           :limit-type limit-type))
+
+(defmethod show ((m set-peer-bandwidth))
+  (with-slots (type-id size limit-type) m
+    (format nil "(~s \"~d\" size=~d limit-type=~d)" "set-peer-bandwidth" type-id size limit-type)))
+
+(defmethod write (out (m set-peer-bandwidth) &key (chunk-size +DEFAULT_CHUNK_SIZE+)
+                                                  (chunk-stream-id +CHUNK_STREAM_ID_PCM+))
+  (write-impl (out m :chunk-size chunk-size
+                     :chunk-stream-id chunk-stream-id)
+    (with-slots (size limit-type) m
+      (write-uint 4 size out)
+      (write-uint 1 size out))))
+
+(defun parse-set-peer-bandwidth (payload stream-id timestamp)
+  (declare (ignore stream-id))
+  (let ((ack-win-size (read-uint-from-bytes 4 payload))
+        (limit-type   (read-uint-from-bytes 1 payload :start 4)))
+    (set-peer-bandwidth ack-win-size limit-type :timestamp timestamp)))
 
 ;;; other
 (defstruct state ; XXX: name ; TODO: chunk-stream-idごとに管理する必要がありそう
@@ -230,7 +262,8 @@
 (defun read (io state)
   (multiple-value-bind (type timestamp stream-id payload)
                        (read-message-chunks io state)
-    (declare (ignore stream-id))
     (ecase type
-      (#. +MESSAGE_TYPE_ID_ACK_WINDOW_SIZE+ (parse-ack-win-size payload timestamp)))
+      (#. +MESSAGE_TYPE_ID_ACK_WINDOW_SIZE+ (parse-ack-win-size payload stream-id timestamp))
+      (#. +MESSAGE_TYPE_ID_SET_PEER_BANDWIDTH+ (parse-set-peer-bandwidth payload stream-id timestamp))
+      )
   ))
