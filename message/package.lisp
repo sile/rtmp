@@ -12,6 +12,9 @@
            ;;; user control
            stream-begin
 
+           ;;;
+           message-base
+
            show
            make-initial-state
            change-state-chunk-size

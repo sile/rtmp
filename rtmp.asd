@@ -35,6 +35,7 @@
                (:file "client/client")
                
                (:file "server/package")
+               (:file "server/handshake")
                (:file "server/server")
 
                (:file "rtmp")))

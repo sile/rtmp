@@ -253,7 +253,7 @@
                      :chunk-stream-id chunk-stream-id)
     (with-slots (size limit-type) m
       (write-uint 4 size out)
-      (write-uint 1 size out))))
+      (write-uint 1 limit-type out))))
 
 (defun parse-set-peer-bandwidth (payload stream-id timestamp)
   (declare (ignore stream-id))
