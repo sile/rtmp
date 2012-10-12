@@ -17,6 +17,10 @@
            ;;; data
            data-base
 
+           ;;; 
+           video 
+           audio
+
            ;;; protocol control
            set-chunk-size
            ack-win-size

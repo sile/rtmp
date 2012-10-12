@@ -27,6 +27,9 @@
 
   (defconstant +MESSAGE_TYPE_ID_DATA_AMF0+ 18)
   (defconstant +MESSAGE_TYPE_ID_DATA_AMF3+ 15)
+
+  (defconstant +MESSAGE_TYPE_ID_VIDEO+ 9)
+  (defconstant +MESSAGE_TYPE_ID_AUDIO+ 8)
   )
 
 
@@ -35,6 +38,56 @@
   (type-id   0 :type (unsigned-byte 8))
   (stream-id 0 :type (unsigned-byte 32))
   (timestamp 0 :type (unsigned-byte 32)))
+
+;;;; video
+(defstruct (video (:include message-base))
+  data)
+
+(defun video (data &key (timestamp (get-internal-real-time)) (stream-id (next-message-stream-id)))
+  (make-video :data data
+              :type-id +MESSAGE_TYPE_ID_VIDEO+
+              :timestamp timestamp
+              :stream-id stream-id))
+
+(defun parse-video (payload stream-id timestamp)
+  (video payload :stream-id stream-id :timestamp timestamp))
+
+(defmethod show ((m video))
+  (with-slots (type-id stream-id timestamp data) m
+    (format nil "(~s \"~d:~d:~d\" ~d)" 
+            "video" type-id stream-id timestamp (length data))))
+
+(defmethod write (out (m video) &key (chunk-size +DEFAULT_CHUNK_SIZE+)
+                                     (chunk-stream-id +CHUNK_STREAM_ID_PCM+))
+  (write-impl (out m :chunk-size chunk-size
+                     :chunk-stream-id chunk-stream-id)
+    (with-slots (data) m
+      (write-bytes data out))))
+
+;;;; audio
+(defstruct (audio (:include message-base))
+  data)
+
+(defun audio (data &key (timestamp (get-internal-real-time)) (stream-id (next-message-stream-id)))
+  (make-audio :data data
+              :type-id +MESSAGE_TYPE_ID_AUDIO+
+              :timestamp timestamp
+              :stream-id stream-id))
+
+(defun parse-audio (payload stream-id timestamp)
+  (audio payload :stream-id stream-id :timestamp timestamp))
+
+(defmethod show ((m audio))
+  (with-slots (type-id stream-id timestamp data) m
+    (format nil "(~s \"~d:~d:~d\" ~d)" 
+            "audio" type-id stream-id timestamp (length data))))
+
+(defmethod write (out (m audio) &key (chunk-size +DEFAULT_CHUNK_SIZE+)
+                                     (chunk-stream-id +CHUNK_STREAM_ID_PCM+))
+  (write-impl (out m :chunk-size chunk-size
+                     :chunk-stream-id chunk-stream-id)
+    (with-slots (data) m
+      (write-bytes data out))))
 
 ;;;; data
 (defstruct (data-base (:include message-base))
@@ -725,6 +778,8 @@
                (#. +MESSAGE_TYPE_ID_COMMAND_AMF3+ (error "unsupported message-type: ~a" type))
                (#. +MESSAGE_TYPE_ID_DATA_AMF0+ (parse-data payload stream-id timestamp 0))
                (#. +MESSAGE_TYPE_ID_DATA_AMF3+ (error "unsupported message-type: ~a" type))
+               (#. +MESSAGE_TYPE_ID_VIDEO+ (parse-video payload stream-id timestamp))
+               (#. +MESSAGE_TYPE_ID_AUDIO+ (parse-audio payload stream-id timestamp))
                )))
         (show-log "message: ~a" (show msg))
         msg))))

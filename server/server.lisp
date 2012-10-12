@@ -88,7 +88,12 @@
 
         (rtmp.message:data-base
          :ignore) ; TODO
-
+        
+        (rtmp.message:video
+         :ignore) ; TODO => chunk-stream-id or message-stream-id 単位での管理をしないと混ざる
+        
+        (rtmp.message:audio
+         :ignore) ; TODO
         )))
   
   (values))
