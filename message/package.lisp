@@ -4,8 +4,11 @@
   (:export ;;; command
            connect
            _result
+           
+           on-bandwidth-done
 
            ;;; protocol control
+           set-chunk-size
            ack-win-size
            set-peer-bandwidth
 

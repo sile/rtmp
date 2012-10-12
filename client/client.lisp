@@ -9,6 +9,9 @@
       (rtmp.message:ack-win-size 
        (setf win-size (rtmp.message::ack-win-size-size msg)))
         
+      (rtmp.message:set-chunk-size
+       (setf (rtmp.message::state-chunk-size msg-state) (rtmp.message::set-chunk-size-size msg)))
+
       (rtmp.message:set-peer-bandwidth 
        (setf win-size (rtmp.message::set-peer-bandwidth-size msg))
        (rtmp.message:write io (rtmp.message:set-peer-bandwidth win-size 2))

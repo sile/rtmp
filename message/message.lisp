@@ -27,7 +27,7 @@
 ;;;; message
 (defstruct message-base
   (type-id   0 :type (unsigned-byte 8))
-  (stream-id 0 :type (unsigned-byte 24))
+  (stream-id 0 :type (unsigned-byte 32))
   (timestamp 0 :type (unsigned-byte 32)))
 
 ;;;; command
@@ -36,6 +36,42 @@
 (defstruct (command-base (:include message-base))
   (name           t :type string)
   (transaction-id t :type number))
+
+;; TODO: 仕様 or 実装 を探す
+(defstruct (on-bandwidth-done (:include command-base))
+  field1 ; XXX:
+  )
+
+(defun on-bandwidth-done (transaction-id &key (field1 :null)
+                                              (timestamp (get-internal-real-time))
+                                              (stream-id (next-message-stream-id))
+                                              (amf-version 0))
+  (declare ((member 0 3) amf-version))
+  (assert (= amf-version 0) () "unsupported AMF version: ~a" amf-version)
+
+  (make-on-bandwidth-done :type-id +MESSAGE_TYPE_ID_COMMAND_AMF0+
+                          :stream-id stream-id
+                          :timestamp timestamp
+                          :name "onbwdone"
+                          :transaction-id transaction-id
+                          :field1 field1))
+
+(defmethod show ((m on-bandwidth-done))
+  (with-slots (type-id stream-id timestamp name transaction-id) m
+    (let ((*print-pretty* nil))
+      (format nil "(~s \"~d:~d:~d\" ~d)"
+              name type-id stream-id timestamp transaction-id ))))
+
+(defmethod write-command (out (m on-bandwidth-done))
+  (with-slots (field1) m
+    (rtmp.amf0:encode field1 out)))
+
+(defun parse-command-on-bandwidth-done (in transaction-id stream-id timestamp)
+  (let ((obj (rtmp.amf0:decode in)))
+    (on-bandwidth-done transaction-id 
+                       :stream-id stream-id
+                       :timestamp timestamp
+                       :field1 obj)))
 
 (defstruct (_result (:include command-base))
   (properties  t :type list-map)
@@ -151,6 +187,7 @@
       (ecase command
         (:connect (parse-command-connect in transaction-id stream-id timestamp))
         (:_result (parse-command-_result in transaction-id stream-id timestamp))
+        (:onbwdone (parse-command-on-bandwidth-done in transaction-id stream-id timestamp))
         ))))
 
 ;;; user control
