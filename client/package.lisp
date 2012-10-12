@@ -2,6 +2,8 @@
   (:use :common-lisp :rtmp.utils :rtmp.const)
   (:export handshake
            connect
+           create-stream
+           play
            ))
 (in-package :rtmp.client)
 

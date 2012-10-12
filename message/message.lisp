@@ -37,6 +37,87 @@
   (name           t :type string)
   (transaction-id t :type number))
 
+(defstruct (publish (:include command-base))
+  (command-object  t :type (member :null))
+  (publishing-name t :type string)
+  (publishing-type t :type string)) ; "live" or "record" or "append"
+
+(defun publish (transaction-id publishing-name publishing-type &key (timestamp 0)
+                                                                    (stream-id (next-message-stream-id))
+                                                                    (amf-version 0))
+  (declare ((member 0 3) amf-version))
+  (assert (= amf-version 0) () "unsupported AMF version: ~a" amf-version)
+
+  (make-publish :type-id +MESSAGE_TYPE_ID_COMMAND_AMF0+
+                :stream-id stream-id
+                :timestamp timestamp
+                :name "publish"
+                :transaction-id transaction-id  ; must be 0
+                :command-object :null
+                :publishing-name publishing-name
+                :publishing-type publishing-type))
+
+(defmethod write-command (out (m publish))
+  (with-slots (command-object publishing-name publishing-type) m
+    (rtmp.amf0:encode command-object out)
+    (rtmp.amf0:encode publishing-name out)
+    (rtmp.amf0:encode publishing-type out)))
+
+(defun parse-command-publish (in transaction-id stream-id timestamp)
+  (let ((obj (rtmp.amf0:decode in))
+        (publishing-name (rtmp.amf0:decode in))
+        (publishing-type (rtmp.amf0:decode in)))
+    (assert (not (listen in)) () "stream is n't consumed")
+    (assert (eq obj :null) () "command-object must be NULL")
+    
+    (publish transaction-id 
+             publishing-name
+             publishing-type
+             :stream-id stream-id
+             :timestamp timestamp)))
+
+(defmethod show-fields ((m publish))
+  (with-slots (publishing-name publishing-type) m
+    (format nil "name=~s type=~s" publishing-name publishing-type)))
+
+(defstruct (delete-stream (:include command-base))
+  (command-object   t :type (member :null))
+  (target-stream-id t :type number))
+
+(defun delete-stream (transaction-id target-stream-id &key (timestamp (get-internal-real-time))
+                                                           (stream-id (next-message-stream-id))
+                                                           (amf-version 0))
+  (declare ((member 0 3) amf-version))
+  (assert (= amf-version 0) () "unsupported AMF version: ~a" amf-version)
+
+  (make-delete-stream :type-id +MESSAGE_TYPE_ID_COMMAND_AMF0+
+                      :stream-id stream-id
+                      :timestamp timestamp
+                      :name "deleteStream"
+                      :transaction-id transaction-id
+                      :command-object :null
+                      :target-stream-id target-stream-id))
+
+(defmethod write-command (out (m delete-stream))
+  (with-slots (command-object target-stream-id) m
+    (rtmp.amf0:encode command-object out)
+    (rtmp.amf0:encode target-stream-id out)))
+
+(defun parse-command-delete-stream (in transaction-id stream-id timestamp)
+  (let ((obj (rtmp.amf0:decode in))
+        (target-stream-id (rtmp.amf0:decode in)))
+    (assert (not (listen in)) () "stream is n't consumed")
+    (assert (eq obj :null) () "command-object must be NULL")
+    
+    (delete-stream transaction-id 
+                   target-stream-id
+                   :stream-id stream-id
+                   :timestamp timestamp)))
+
+(defmethod show-fields ((m delete-stream))
+  (with-slots (target-stream-id) m
+    (format nil "stream-id=~s" target-stream-id)))
+
 (defstruct (create-stream (:include command-base))
   (command-object t :type (or list-map (member :null))))
 
@@ -216,9 +297,10 @@
 (defun parse-command-_result (in transaction-id stream-id timestamp)
   (let ((properties (rtmp.amf0:decode in))
         (information (rtmp.amf0:decode in)))
-    (declare (rtmp.amf0:object-type properties information))
 
-    (_result transaction-id (second properties) (second information)
+    (_result transaction-id
+             (if (listp properties) (second properties) properties)
+             (if (listp information) (second information) information) ; XXX:
              :stream-id stream-id
              :timestamp timestamp)))
 
@@ -297,6 +379,8 @@
       (ecase command
         (:connect (parse-command-connect in transaction-id stream-id timestamp))
         (:createStream (parse-command-create-stream in transaction-id stream-id timestamp))
+        (:deleteStream (parse-command-delete-stream in transaction-id stream-id timestamp))
+        (:publish (parse-command-publish in transaction-id stream-id timestamp))
         (:_result (parse-command-_result in transaction-id stream-id timestamp))
         (:onBWDone (parse-command-on-bandwidth-done in transaction-id stream-id timestamp))
         (:releaseStream (parse-command-release-stream in transaction-id stream-id timestamp))

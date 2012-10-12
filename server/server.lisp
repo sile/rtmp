@@ -9,7 +9,7 @@
     (rtmp.message:write io (rtmp.message:set-peer-bandwidth *default-ack-win-size* 2))
     ;; (rtmp.message:write io (rtmp.message:stream-begin 0)) ;; XXX: 必要? (and 適切?)
 
-    (rtmp.message:write io (rtmp.message:set-chunk-size 1024))
+    ;; (rtmp.message:write io (rtmp.message:set-chunk-size 1024))
     (force-output io)
 
 ;; for FMLE
@@ -26,10 +26,10 @@
                    ("objectEncoding" 0)
                    ("data" (:MAP NIL)) 
                    ("version" "4,5,0,297"))))
-      (rtmp.message:write io (rtmp.message:_result 1 props infos :stream-id 0) :chunk-size 1024))
+      (rtmp.message:write io (rtmp.message:_result 1 props infos :stream-id 0)))
     
-    (rtmp.message:write io (rtmp.message:on-bandwidth-done 0 :stream-id 0) :chunk-size 1024)
-    (rtmp.message:write io (rtmp.message:ack-win-size *default-ack-win-size*) :chunk-size 1024)
+    (rtmp.message:write io (rtmp.message:on-bandwidth-done 0 :stream-id 0))
+    (rtmp.message:write io (rtmp.message:ack-win-size *default-ack-win-size*))
     (force-output io)
     ))
 
@@ -58,8 +58,18 @@
         
         (rtmp.message:create-stream
          (let ((transaction-id (rtmp.message::command-base-transaction-id msg))
-               (stream-id 1234)) ; XXX: dummy
-           (rtmp.message:write io (rtmp.message:_result transaction-id :null stream-id))))
+               (stream-id (rtmp.message::command-base-stream-id msg))
+               (target-stream-id 1234)) ; XXX: dummy
+           (rtmp.message:write io (rtmp.message:_result transaction-id :null target-stream-id 
+                                                        :stream-id stream-id
+                                                        :timestamp 0))
+           (force-output io)))
+
+        (rtmp.message:publish
+         :ignore) ; XXX:
+
+        (rtmp.message:delete-stream
+         :ignore)
 
         )))
   

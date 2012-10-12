@@ -6,6 +6,8 @@
            _result
            _error
            create-stream
+           delete-stream
+           publish
 
            on-bandwidth-done
            release-stream
