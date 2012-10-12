@@ -52,5 +52,5 @@
 
       (send-c2 io recv-timestamp timestamp recv-random-bytes)
       (recv-s2 io timestamp random-bytes)
-      
+
       (values recv-timestamp recv-zero recv-random-bytes))))

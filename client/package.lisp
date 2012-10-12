@@ -1,6 +1,7 @@
 (defpackage rtmp.client
   (:use :common-lisp :rtmp.utils :rtmp.const)
   (:export handshake
+           connect
            ))
 (in-package :rtmp.client)
 

@@ -5,10 +5,11 @@
            
            write-uint
            write-bytes
-           read-uint
+           read-uint read-uint-from-bytes
            read-bytes
 
            with-output-to-bytes
+           with-input-from-bytes
 
            write-handshake-0
            write-handshake-1

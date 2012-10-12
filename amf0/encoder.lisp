@@ -38,7 +38,7 @@
 
 (defun encode-object (list out)
   (write-uint 1 +OBJECT_MARKER+ out)
-  (loop FOR (key . value) IN list
+  (loop FOR (key value) IN list
     DO 
     (encode-string-no-marker key out)
     (encode-impl value out))
@@ -49,7 +49,7 @@
   (destructuring-bind (class list) data
     (write-uint 1 +TYPED_OBJECT_MARKER+ out)
     (encode-string-no-marker class out)
-    (loop FOR (key . value) IN list
+    (loop FOR (key value) IN list
       DO 
       (encode-string-no-marker key out)
       (encode-impl value out))
@@ -71,7 +71,7 @@
 (defun encode-ecma-array (list out)
   (write-uint 1 +ECMA_ARRAY_MARKER+ out)
   (write-uint 4 (length list) out)
-  (loop FOR (key . value) IN list
+  (loop FOR (key value) IN list
     DO
     (encode-string-no-marker key out)
     (encode-impl value out)))

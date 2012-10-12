@@ -21,7 +21,7 @@
   (loop FOR key   = (decode-string in)
 	FOR value = (decode-impl in)
 	UNTIL (eq value :object-end)
-    COLLECT (cons key value) INTO list
+    COLLECT (list key value) INTO list
     FINALLY (return `(:map ,list))))
 
 (defun decode-typed-object (in)
@@ -29,7 +29,7 @@
 	FOR key    = (decode-string in)
 	FOR value  = (decode-impl in)
 	UNTIL (eq value :object-end)
-    COLLECT (cons key value) INTO list
+    COLLECT (list key value) INTO list
     FINALLY (return `(:class (,class ,list)))))
 
 (defun decode-null (in) (declare (ignore in)) :null)
@@ -45,7 +45,7 @@
     (loop REPEAT size
 	  FOR key   = (decode-string in)
 	  FOR value = (decode-impl in)
-      COLLECT (cons key value) INTO list
+      COLLECT (list key value) INTO list
       FINALLY (return `(:map ,list)))))
 
 (defun decode-strict-array (in)

@@ -35,6 +35,7 @@
 							   (* (- byte-width i 1) 8))
 				COLLECT `(ash (read-byte ,in) ,offset)))))
 
+
 (defun read-bytes (length in)
   (let ((buffer (make-array length :element-type '(unsigned-byte 8)))) ; TODO: octet
     ;; TODO: read length check
@@ -54,15 +55,23 @@
 			   COLLECT `(write-byte (ldb (byte 8 ,offset) ,v) ,out))
 	   (values))))
 
-(defun write-bytes (bytes out)
-  ;; TODO: declare
+(defun write-bytes (bytes out &key (start 0) (end (length bytes)))
+  (declare (octets bytes))
   ;; TODO: wrote length check
-  (write-sequence bytes out)
+  (write-sequence bytes out :start start :end end)
   (values))
 
 (defmacro with-output-to-bytes ((out) &body body)
   `(flexi-streams:with-output-to-sequence (,out :element-type 'octet)
      ,@body))
+
+(defmacro with-input-from-bytes ((in bytes) &body body)
+  `(flexi-streams:with-input-from-sequence (,in ,bytes)
+     ,@body))
+
+(defmacro read-uint-from-bytes (byte-width bytes &key (endian :big))
+  `(with-input-from-bytes (in ,bytes)
+     (read-uint ,byte-width in :endian ,endian)))
 
 (defparameter *show-log* t)
 (defparameter *log-nest* 0)
@@ -74,8 +83,9 @@
 
 (defmacro with-log-section ((name) &body body)
   `(when *show-log*
+     (show-log "")
      (show-log "[~a]" ,name)
-     (prog1 (let ((*log-nest* (1+ *log-nest*)))
-              ,@body)
-       (show-log ""))))
+     (let ((*log-nest* (1+ *log-nest*)))
+	   ,@body)))
+
 

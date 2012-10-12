@@ -27,6 +27,7 @@
                (:file "socket/socket")
 
                (:file "message/package")
+               (:file "message/chunk")
                (:file "message/message")
 
                (:file "client/package")
