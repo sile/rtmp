@@ -12,4 +12,5 @@
       (etypecase msg
         (rtmp.message:ack-win-size :todo)
         (rtmp.message:set-peer-bandwidth :todo)
+        (rtmp.message:stream-begin :todo)
         ))))

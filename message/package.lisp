@@ -8,6 +8,9 @@
            ack-win-size
            set-peer-bandwidth
 
+           ;;; user control
+           stream-begin
+
            show
            make-initial-state
            change-state-chunk-size

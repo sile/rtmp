@@ -86,7 +86,52 @@
       (when optional-args
         (rtmp.amf0:encode `(:map ,optional-args) out)))))
 
-;;; control
+;;; user control
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (defconstant +MESSAGE_TYPE_ID_UCM+ 4)
+  
+  (defconstant +UCM_EVENT_STREAM_BEGIN+ 0)
+  )
+
+(defstruct (user-control-base (:include message-base))
+  (event-type 0 :type (unsigned-byte 16)))
+
+(defstruct (stream-begin (:include user-control-base))
+  (target-stream-id 0 :type (unsigned-byte 32)))
+
+(defun stream-begin (target-stream-id &key (timestamp (get-internal-real-time)))
+  (make-stream-begin :type-id +MESSAGE_TYPE_ID_UCM+
+                     :stream-id +MESSAGE_STREAM_ID_PCM+
+                     :event-type +UCM_EVENT_STREAM_BEGIN+
+                     :timestamp timestamp
+                     :target-stream-id target-stream-id))
+
+(defmethod show ((m stream-begin))
+  (with-slots (type-id event-type target-stream-id) m
+    (format nil "(~s \"~d:~d\" stream-id=~d)" "stream-begin" type-id event-type target-stream-id))) 
+
+(defmethod write (out (m user-control-base) &key (chunk-size +DEFAULT_CHUNK_SIZE+)
+                                                 (chunk-stream-id +CHUNK_STREAM_ID_PCM+))
+  (write-impl (out m :chunk-size chunk-size :chunk-stream-id chunk-stream-id)
+    (with-slots (event-type target-stream-id) m
+      (write-uint 2 event-type out)
+      (write-ucm out m))))
+
+(defmethod write-ucm (out (m stream-begin))
+  (write-uint 4 (stream-begin-target-stream-id m) out))
+
+(defun parse-stream-begin (payload timestamp)
+  (let ((target-stream-id (read-uint-from-bytes 4 payload :start 2)))
+    (stream-begin target-stream-id :timestamp timestamp)))
+
+(defun parse-user-control (payload stream-id timestamp)
+  (declare (ignore stream-id))
+  (let ((event-type (read-uint-from-bytes 2 payload)))
+    (ecase event-type
+      (#. +UCM_EVENT_STREAM_BEGIN+ (parse-stream-begin payload timestamp))
+      )))
+
+;;; program control
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (defconstant +MESSAGE_TYPE_ID_ACK_WINDOW_SIZE+ 5)
   (defconstant +MESSAGE_TYPE_ID_SET_PEER_BANDWIDTH+ 6)
@@ -187,7 +232,7 @@
   (let ((timestamp         (read-uint 3 io))
         (message-length    (read-uint 3 io))
         (message-type-id   (read-uint 1 io))
-        (message-stream-id (read-uint 4 io)))
+        (message-stream-id (read-uint 4 io :endian :little)))
     (show-log "msg-header-fmt0# timestamp=~d, length=~d, type-id=~d, stream-id=~d" 
               timestamp message-length message-type-id message-stream-id)
     (setf (state-timestamp state) timestamp
@@ -265,5 +310,6 @@
     (ecase type
       (#. +MESSAGE_TYPE_ID_ACK_WINDOW_SIZE+ (parse-ack-win-size payload stream-id timestamp))
       (#. +MESSAGE_TYPE_ID_SET_PEER_BANDWIDTH+ (parse-set-peer-bandwidth payload stream-id timestamp))
+      (#. +MESSAGE_TYPE_ID_UCM+ (parse-user-control payload stream-id timestamp))
       )
   ))
