@@ -11,6 +11,7 @@
 (defconstant +CHUNK_STREAM_ID_INDICATE_2BYTE+ 0)
 (defconstant +CHUNK_STREAM_ID_INDICATE_3BYTE+ 1)
 
+;;;; write
 (defun write-chunk-basic-header (out fmt chunk-stream-id)
   (declare ((integer 0 3) fmt)
            ((integer 2 65599) chunk-stream-id))
@@ -63,3 +64,145 @@
           DO
           (write-fmt3-chunk out chunk-stream-id payload :start offset :end end)))
   (values))
+
+
+;;;; read
+(defstruct message-buffer
+  stream-id
+  type-id
+  timestamp
+  payloads)
+
+(defstruct chunk-buffer
+  stream-id
+
+  prev-message-type-id
+  prev-message-type-id
+  prev-message-stream-id
+  prev-timestamp
+  (prev-timestamp-delta 0)
+
+  payload-length
+  (payload-read-length 0)
+  
+  message-buffers)
+  
+(defstruct state ; XXX: name ; TODO: chunk-stream-idごとに管理する必要がありそう
+;; delete: begin
+  chunk-stream-id
+  message-type-id
+  message-stream-id
+  timestamp
+  (timestamp-delta 0)
+;; delete: end
+
+  chunk-size
+
+;; delete: begin
+  (payload-length 0)
+  payload-chunks
+;; delete: end
+  )
+  
+(defun state-payload-read-length (state)
+  (loop FOR chunk IN (state-payload-chunks state)
+        SUM (length chunk)))
+
+(defun make-initial-state (&key (chunk-size +DEFAULT_CHUNK_SIZE+))
+  (make-state :chunk-size chunk-size))
+
+(defun change-state-chunk-size (state new-chunk-size)
+  (setf (state-chunk-size state) new-chunk-size)
+  t)
+
+(defun read-chunk-basic-header (in)
+  (let* ((byte1 (read-uint 1 in))
+         (fmt                  (ldb (byte 2 6) byte1))
+         (base-chunk-stream-id (ldb (byte 6 0) byte1))
+         (chunk-stream-id 
+          (case base-chunk-stream-id
+            (#. +CHUNK_STREAM_ID_INDICATE_2BYTE+ (+ (read-uint 1 in) 64))
+            (#. +CHUNK_STREAM_ID_INDICATE_3BYTE+ (+ (read-uint 2 in) 64))
+            (otherwise                           base-chunk-stream-id))))
+    (values fmt chunk-stream-id)))
+
+(defun read-chunk-message-header-fmt0 (io state)
+  (let ((timestamp         (read-uint 3 io))
+        (message-length    (read-uint 3 io))
+        (message-type-id   (read-uint 1 io))
+        (message-stream-id (read-uint 4 io :endian :little)))
+    (show-log "msg-header-fmt0# timestamp=~d, length=~d, type-id=~d, stream-id=~d" 
+              timestamp message-length message-type-id message-stream-id)
+    (setf (state-timestamp state) timestamp
+          (state-timestamp-delta state) 0
+          (state-payload-length state) message-length
+          (state-message-type-id state) message-type-id
+          (state-message-stream-id state) message-stream-id)
+    
+    (when (= timestamp #x00FFFFFF)
+      (setf (state-timestamp state) (read-uint 4 io))))
+
+  (values))
+
+(defun read-chunk-message-header-fmt1 (io state)
+  (let ((timestamp-delta (read-uint 3 io))
+        (message-length  (read-uint 3 io))
+        (message-type-id (read-uint 1 io)))
+    (show-log "msg-header-fmt1# timestamp-delta=~d, length=~d, type-id=~d" 
+              timestamp-delta message-length message-type-id)
+    (setf (state-timestamp-delta state) timestamp-delta
+          (state-payload-length state) message-length
+          (state-message-type-id state) message-type-id)
+
+    (when (= timestamp-delta #x00FFFFFF)
+      (setf (state-timestamp-delta state) (read-uint 4 io))))
+  (values))
+
+(defun read-chunk-message-header-fmt2 (io state)
+  (let ((timestamp-delta (read-uint 3 io)))
+    (show-log "msg-header-fmt2# timestamp-delta=~d" timestamp-delta)
+    (setf (state-timestamp-delta state) timestamp-delta)
+
+    (when (= timestamp-delta #x00FFFFFF)
+      (setf (state-timestamp-delta state) (read-uint 4 io))))
+  (values))
+
+(defun read-chunk-message-header-fmt3 (io state)
+  (declare (ignore io state))
+  (show-log "msg-header-fmt3#")
+  (values))
+
+(defun read-chunk (io state)
+  (with-log-section ("read-chunk")
+    (multiple-value-bind (fmt chunk-stream-id)
+                         (read-chunk-basic-header io)
+      (show-log "basic-header# fmt=~d, chunk-stream-id=~d" fmt chunk-stream-id)
+      (setf (state-chunk-stream-id state) chunk-stream-id)
+
+      (ecase fmt
+        (0 (read-chunk-message-header-fmt0 io state))
+        (1 (read-chunk-message-header-fmt1 io state))
+        (2 (read-chunk-message-header-fmt2 io state))
+        (3 (read-chunk-message-header-fmt3 io state)))
+
+      (incf (state-timestamp state) (state-timestamp-delta state))
+
+      (let* ((message-payload-length (state-payload-length state))
+             (read-payload-length (state-payload-read-length state))
+             (chunk-payload-length (min (state-chunk-size state)
+                                        (- message-payload-length read-payload-length))))
+        (push (read-bytes chunk-payload-length io) (state-payload-chunks state))
+        
+        (show-log "current message# timestamp=~d, payload-length=~d"
+                  (state-timestamp state) (state-payload-read-length state))
+        (assert (<= (state-payload-read-length state) message-payload-length) ; XXX: 毎回計算は無駄
+                () "TODO: ")
+        (= (state-payload-read-length state) message-payload-length)))))
+    
+(defun read-message-chunks (io state)
+  (loop FOR end? = (read-chunk io state)
+        UNTIL end?)
+  (with-slots (message-type-id timestamp message-stream-id payload-chunks) state
+    (let ((payload (apply #'concatenate 'octets (reverse payload-chunks))))
+      (setf payload-chunks '())
+      (values message-type-id timestamp message-stream-id payload))))
