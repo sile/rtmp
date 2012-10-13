@@ -7,6 +7,7 @@
            _error
            create-stream
            delete-stream
+           close-stream
            publish
 
            on-bandwidth-done

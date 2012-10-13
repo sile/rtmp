@@ -85,9 +85,12 @@
                                                           :stream-id stream-id
                                                           :timestamp 0))
            (force-output io)))
+        
+        (rtmp.message:close-stream
+         :ignore) ; TODO
 
         (rtmp.message:delete-stream
-         :ignore) ; TODO
+         (return))
 
         (rtmp.message:data-base
          :ignore) ; TODO
