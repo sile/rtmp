@@ -1,6 +1,6 @@
 (in-package :rtmp.server)
 
-(defparameter *default-ack-win-size* 2500000)
+(defparameter *default-ack-win-size* 2000000)
 
 (defun handle-connect (io state)
   (declare (ignorable state))

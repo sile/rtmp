@@ -34,10 +34,10 @@
 
 
 ;;;; message
-(defstruct message-base
-  (type-id   0 :type (unsigned-byte 8))
-  (stream-id 0 :type (unsigned-byte 32))
-  (timestamp 0 :type (unsigned-byte 32)))
+;;(defstruct message-base
+;;  (type-id   0 :type (unsigned-byte 8))
+;;  (stream-id 0 :type (unsigned-byte 32))
+;;  (timestamp 0 :type (unsigned-byte 32)))
 
 ;;;; video
 (defstruct (video (:include message-base))
@@ -626,6 +626,7 @@
   (let ((size (read-uint-from-bytes 4 payload)))
     (ack-win-size size :timestamp timestamp)))
 
+;; 応答は ack-win-size で行う (送られてきた set-peer-bandwidth とおりに設定したかどうか)
 (defstruct (set-peer-bandwidth (:include protocol-control-base))
   (size       0 :type (unsigned-byte 32))
   (limit-type 0 :type (unsigned-byte 8)))
@@ -658,20 +659,20 @@
 ;;; other
 (defun read (io state)
   (with-log-section ("read-message")
-    (multiple-value-bind (type timestamp stream-id payload)
-                         (read-message-chunks io state)
-      (let ((msg 
-             (ecase type
-               (#. +MESSAGE_TYPE_ID_SET_CHUNK_SIZE+ (parse-set-chunk-size payload stream-id timestamp))
-               (#. +MESSAGE_TYPE_ID_ACK_WINDOW_SIZE+ (parse-ack-win-size payload stream-id timestamp))
-               (#. +MESSAGE_TYPE_ID_SET_PEER_BANDWIDTH+ (parse-set-peer-bandwidth payload stream-id timestamp))
-               (#. +MESSAGE_TYPE_ID_UCM+ (parse-user-control payload stream-id timestamp))
-               (#. +MESSAGE_TYPE_ID_COMMAND_AMF0+ (parse-command payload stream-id timestamp 0))
-               (#. +MESSAGE_TYPE_ID_COMMAND_AMF3+ (error "unsupported message-type: ~a" type))
-               (#. +MESSAGE_TYPE_ID_DATA_AMF0+ (parse-data payload stream-id timestamp 0))
-               (#. +MESSAGE_TYPE_ID_DATA_AMF3+ (error "unsupported message-type: ~a" type))
-               (#. +MESSAGE_TYPE_ID_VIDEO+ (parse-video payload stream-id timestamp))
-               (#. +MESSAGE_TYPE_ID_AUDIO+ (parse-audio payload stream-id timestamp))
-               )))
-        (show-log "message: ~a" (show msg))
-        msg))))
+    (destructuring-bind (message-base payload) (read-message-chunks io state)
+      (with-slots (type-id timestamp stream-id) message-base
+        (let ((msg 
+                (ecase type-id
+                  (#. +MESSAGE_TYPE_ID_SET_CHUNK_SIZE+ (parse-set-chunk-size payload stream-id timestamp))
+                  (#. +MESSAGE_TYPE_ID_ACK_WINDOW_SIZE+ (parse-ack-win-size payload stream-id timestamp))
+                  (#. +MESSAGE_TYPE_ID_SET_PEER_BANDWIDTH+ (parse-set-peer-bandwidth payload stream-id timestamp))
+                  (#. +MESSAGE_TYPE_ID_UCM+ (parse-user-control payload stream-id timestamp))
+                  (#. +MESSAGE_TYPE_ID_COMMAND_AMF0+ (parse-command payload stream-id timestamp 0))
+                  (#. +MESSAGE_TYPE_ID_COMMAND_AMF3+ (error "unsupported message-type: ~a" type-id))
+                  (#. +MESSAGE_TYPE_ID_DATA_AMF0+ (parse-data payload stream-id timestamp 0))
+                  (#. +MESSAGE_TYPE_ID_DATA_AMF3+ (error "unsupported message-type: ~a" type-id))
+                  (#. +MESSAGE_TYPE_ID_VIDEO+ (parse-video payload stream-id timestamp))
+                  (#. +MESSAGE_TYPE_ID_AUDIO+ (parse-audio payload stream-id timestamp))
+                  )))
+          (show-log "message: ~a" (show msg))
+          msg)))))
