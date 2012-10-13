@@ -12,6 +12,7 @@
            on-bandwidth-done
            release-stream
            fcpublish
+           FCUnpublish
            on-status
 
            ;;; data

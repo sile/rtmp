@@ -61,6 +61,9 @@
 
         (rtmp.message:fcpublish
          (show-log "recv FCPublish# stream-id=~s" (rtmp.message::fcpublish-field2 msg)))
+
+        (rtmp.message:fcunpublish
+         (show-log "recv FCUNpublish# stream-id=~s" (rtmp.message::fcunpublish-field2 msg)))
         
         (rtmp.message:create-stream
          (let ((transaction-id (rtmp.message::command-base-transaction-id msg))
