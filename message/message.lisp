@@ -1,5 +1,10 @@
 (in-package :rtmp.message)
 
+(defun to-amf-map (x)  ;; XXX:
+  (if (listp x)
+      `(:map ,x)
+    x))
+
 (defun list-map-p (list)
   (and (listp list)
        (every (lambda (x) (and (consp x) (stringp (car x)))) list)))
@@ -104,7 +109,17 @@
   (declare (ignore amf-version))
 
   (with-input-from-bytes (in payload)
-    (let ((data (loop WHILE (listen in) COLLECT (rtmp.amf0:decode in))))
+    (let ((data (delete
+                 nil
+                 (loop WHILE (listen in) 
+                       COLLECT
+                       (multiple-value-bind (rlt reason)
+                                            (ignore-errors (rtmp.amf0:decode in))
+                         (when (not (eq reason t))
+                           (let ((*print-pretty* nil))
+                             (show-log "error: ~a" reason)))
+                         rlt)))))
+
       (data-base data 
                  :timestamp timestamp
                  :stream-id stream-id))))
@@ -266,8 +281,9 @@
 
 (defmethod write-command (out (m on-status))
   (with-slots (field1 field2) m
-    (rtmp.amf0:encode field1 out)
-    (rtmp.amf0:encode field2 out)))
+    (declare ((or list-map (member :null)) field1 field2)) ; XXX:
+    (rtmp.amf0:encode (to-amf-map field1) out)
+    (rtmp.amf0:encode (to-amf-map field2) out)))
 
 (defun parse-command-on-status (in transaction-id stream-id timestamp)
   (let ((obj1 (rtmp.amf0:decode in))

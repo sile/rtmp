@@ -7,7 +7,8 @@
   (with-log-section ("handle-connect")
     (rtmp.message:write io (rtmp.message:ack-win-size *default-ack-win-size*))
     (rtmp.message:write io (rtmp.message:set-peer-bandwidth *default-ack-win-size* 2))
-    ;; (rtmp.message:write io (rtmp.message:stream-begin 0)) ;; XXX: 必要? (and 適切?)
+
+    (rtmp.message:write io (rtmp.message:stream-begin 0)) ;; XXX: 必要? (and 適切?)
 
     ;; (rtmp.message:write io (rtmp.message:set-chunk-size 1024))
     (force-output io)
@@ -72,6 +73,9 @@
            (rtmp.message:write io (rtmp.message:_result transaction-id :null target-stream-id 
                                                         :stream-id stream-id
                                                         :timestamp 0))
+
+           (rtmp.message:write io (rtmp.message:stream-begin target-stream-id)) ;; XXX: 必要? (and 適切?)
+           
            (force-output io)))
 
         (rtmp.message:publish
