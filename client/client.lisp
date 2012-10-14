@@ -1,6 +1,14 @@
 (in-package :rtmp.client)
 
 (defun receive-loop (io state)
+  (when (and (plusp (rtmp.message::state-next-ack-size state))
+             (< (rtmp.message::state-next-ack-size state)
+                (rtmp.socket:read-byte-count io)))
+    (rtmp.message:write io (rtmp.message:ack (rtmp.socket:read-byte-count io)))
+    (force-output io)
+    (incf (rtmp.message::state-next-ack-size state)
+          (rtmp.message::state-ack-win-size state)))
+  
   (loop WITH win-size = -1  ; TODO: ちゃんと処理する
         WITH target-stream-id = -1 ; TODO: ちゃんと処理する
         FOR msg = (rtmp.message:read io state)
@@ -13,9 +21,13 @@
        (setf (rtmp.message::state-chunk-size state) (rtmp.message::set-chunk-size-size msg)))
 
       (rtmp.message:set-peer-bandwidth 
-       (setf win-size (rtmp.message::set-peer-bandwidth-size msg))
-       (rtmp.message:write io (rtmp.message:set-peer-bandwidth win-size 2))
-       (force-output io))
+       (let ((win-size (rtmp.message::set-peer-bandwidth-size msg)))
+         ;; XXX: rtmp.message:ack-win-size の方の値をセットする可能性もある
+         (setf (rtmp.message::state-ack-win-size state) win-size)
+         (incf (rtmp.message::state-next-ack-size state) win-size)
+
+         (rtmp.message:write io (rtmp.message:set-peer-bandwidth win-size 2))
+         (force-output io)))
         
       (rtmp.message:stream-begin 
        (setf target-stream-id (rtmp.message::stream-begin-target-stream-id msg)))
@@ -27,7 +39,10 @@
        (return (values msg win-size target-stream-id)))
       
       (rtmp.message:ping-request
-       (rtmp.message:write io (rtmp.message:ping-response (get-internal-real-time))))
+       (rtmp.message:write io (rtmp.message:ping-response
+                               (rtmp.message::ping-request-ping-timestamp msg)
+                               #+C (get-internal-real-time)))
+       (force-output io))
 
       (rtmp.message:video 
        (return msg)
@@ -232,3 +247,4 @@
                          :stream-name stream-name
                          :output out)
         (close out)))))
+

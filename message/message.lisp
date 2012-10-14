@@ -910,6 +910,7 @@
 ;;; program control
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (defconstant +MESSAGE_TYPE_ID_SET_CHUNK_SIZE+ 1)
+  (defconstant +MESSAGE_TYPE_ID_ACK+ 3)
   (defconstant +MESSAGE_TYPE_ID_ACK_WINDOW_SIZE+ 5)
   (defconstant +MESSAGE_TYPE_ID_SET_PEER_BANDWIDTH+ 6)
   )
@@ -918,6 +919,30 @@
 (defconstant +MESSAGE_STREAM_ID_PCM+ 0)
 
 (defstruct (protocol-control-base (:include message-base)))
+
+(defstruct (ack (:include protocol-control-base))
+  (read-size 0 :type (unsigned-byte 32)))
+
+(defun ack (read-size &key (timestamp 0))
+  (make-ack :type-id +MESSAGE_TYPE_ID_ACK+
+            :stream-id +MESSAGE_STREAM_ID_PCM+
+            :timestamp timestamp
+            :read-size read-size))
+
+(defmethod write (out (m ack)  &key (chunk-size +DEFAULT_CHUNK_SIZE+)
+                                    (chunk-stream-id +CHUNK_STREAM_ID_PCM+))
+  (write-impl (out m :chunk-size chunk-size
+                     :chunk-stream-id chunk-stream-id)
+    (write-uint 4 (ack-read-size m) out)))
+
+(defun parse-ack (payload stream-id timestamp)
+  (declare (ignore stream-id))
+  (let ((size (read-uint-from-bytes 4 payload)))
+    (ack size :timestamp timestamp)))
+
+(defmethod show ((m ack))
+  (with-slots (type-id read-size) m
+    (format nil "(~s \"~d\" read-size=~d)" "ack" type-id read-size)))
 
 (defstruct (set-chunk-size (:include protocol-control-base))
   (size 0 :type (unsigned-byte 32)))
@@ -1005,6 +1030,7 @@
         (let ((msg 
                 (ecase type-id
                   (#. +MESSAGE_TYPE_ID_SET_CHUNK_SIZE+ (parse-set-chunk-size payload stream-id timestamp))
+                  (#. +MESSAGE_TYPE_ID_ACK+ (parse-ack payload stream-id timestamp))
                   (#. +MESSAGE_TYPE_ID_ACK_WINDOW_SIZE+ (parse-ack-win-size payload stream-id timestamp))
                   (#. +MESSAGE_TYPE_ID_SET_PEER_BANDWIDTH+ (parse-set-peer-bandwidth payload stream-id timestamp))
                   (#. +MESSAGE_TYPE_ID_UCM+ (parse-user-control payload stream-id timestamp))

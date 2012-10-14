@@ -95,6 +95,8 @@
 (defstruct state ; XXX: name ; TODO: chunk-stream-idごとに管理する必要がありそう
   chunk-size
   chunk-buffers
+  (ack-win-size 1000) ; XXX:
+  (next-ack-size 0) ; XXX:
   queue
   )
   

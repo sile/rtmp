@@ -28,6 +28,7 @@
            set-chunk-size
            ack-win-size
            set-peer-bandwidth
+           ack
 
            ;;; user control
            stream-begin
