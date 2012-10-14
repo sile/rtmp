@@ -31,6 +31,7 @@
 
            ;;; user control
            stream-begin
+           set-buffer-length
            stream-is-recorded
 
            ;;;

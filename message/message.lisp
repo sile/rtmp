@@ -682,11 +682,39 @@
   (defconstant +MESSAGE_TYPE_ID_UCM+ 4)
   
   (defconstant +UCM_EVENT_STREAM_BEGIN+ 0)
+  (defconstant +UCM_EVENT_SET_BUFFER_LENGTH+ 3)
   (defconstant +UCM_EVENT_STREAM_IS_RECORDED+ 4)
   )
 
 (defstruct (user-control-base (:include message-base))
   (event-type 0 :type (unsigned-byte 16)))
+
+(defstruct (set-buffer-length (:include user-control-base))
+  (target-stream-id 0 :type (unsigned-byte 32))
+  (buffer-length    0 :type (unsigned-byte 32)))
+
+(defun set-buffer-length (target-stream-id buffer-length &key (timestamp (get-internal-real-time)))
+  (make-set-buffer-length :type-id +MESSAGE_TYPE_ID_UCM+
+                          :stream-id +MESSAGE_STREAM_ID_PCM+
+                          :event-type +UCM_EVENT_SET_BUFFER_LENGTH+
+                          :timestamp timestamp
+                          :target-stream-id target-stream-id
+                          :buffer-length buffer-length))
+
+(defmethod show ((m set-buffer-length))
+  (with-slots (type-id event-type target-stream-id buffer-length) m
+    (format nil "(~s \"~d:~d\" stream-id=~d length=~d)"
+            "set-buffer-length" type-id event-type target-stream-id buffer-length)))
+
+(defmethod write-ucm (out (m set-buffer-length))
+  (with-slots (target-stream-id buffer-length) m 
+    (write-uint 4 target-stream-id out)
+    (write-uint 4 buffer-length out)))
+
+(defun parse-set-buffer-length (payload timestamp)
+  (let ((target-stream-id (read-uint-from-bytes 4 payload :start 2))
+        (buffer-length (read-uint-from-bytes 4 payload :start 6)))
+    (set-buffer-length target-stream-id buffer-length :timestamp timestamp)))
 
 (defstruct (stream-is-recorded (:include user-control-base))
   (target-stream-id 0 :type (unsigned-byte 32)))
@@ -744,6 +772,7 @@
   (let ((event-type (read-uint-from-bytes 2 payload)))
     (ecase event-type
       (#. +UCM_EVENT_STREAM_BEGIN+ (parse-stream-begin payload timestamp))
+      (#. +UCM_EVENT_SET_BUFFER_LENGTH+ (parse-set-buffer-length payload timestamp))
       (#. +UCM_EVENT_STREAM_IS_RECORDED+ (parse-stream-is-recorded payload timestamp))
       )))
 

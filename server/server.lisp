@@ -93,6 +93,9 @@
         (rtmp.message:play
          :not-implemented) ; TODO:
         
+        (rtmp.message:set-buffer-length
+         :ignore) ; TODO
+
         (rtmp.message:close-stream
          :ignore) ; TODO
 
