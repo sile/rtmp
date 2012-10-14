@@ -146,13 +146,17 @@
 (defun tag-write (out data &key (filter nil)
                                 tag-type
                                 timestamp
-                                stream-id)
+                                stream-id
+                                prev-tag-size)
   (declare (boolean filter)
            ((member :audio :video :script-data) tag-type)
            ((unsigned-byte 32) timestamp)
            ((unsigned-byte 24) stream-id)
-           (octets data))
-  
+           (octets data)
+           ((unsigned-byte 32) prev-tag-size))
+
+  (write-uint 4 prev-tag-size out)
+
   (write-uint 1 (+ (ash 0 6)
                    (ash (if filter 1 0) 5)
                    (ecase tag-type

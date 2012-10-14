@@ -61,15 +61,7 @@
         ))))
 
 ;;; rtmpdump
-(rtmp.socket:with-client-socket-stream (io "localhost" 1935)
-  (rtmp.client:rtmpdump
-   io
-   :url "rtmp://localhost:1935/"
-   :app "live"
-   :stream-name "livestream"
-   :output *standard-output*))
-   
-
+(rtmp.client:rtmpdump "localhost" 1935 "live" "livestream" "/tmp/play.flv")
 
 ;; TODO: ack-win-sizeごとのメッセージ送信
 

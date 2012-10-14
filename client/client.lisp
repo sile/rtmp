@@ -27,6 +27,8 @@
        (return (values msg win-size target-stream-id)))
       
       (rtmp.message:video 
+       (return msg)
+       #+IGNORE
        (ignore-errors
          (let ((pkt (rtmp.flv:decode-video-packet-bytes 
                      (rtmp.message::video-data msg))))
@@ -34,12 +36,17 @@
            (return pkt))))
     
       (rtmp.message:audio
+       (return msg)
+       #+IGNORE
        (ignore-errors
          (let ((pkt (rtmp.flv:decode-audio-packet-bytes 
                      (rtmp.message::audio-data msg))))
            (show-log "recv audio# ~a" pkt)
            (return pkt))))
-
+      
+      (rtmp.message:data-base
+       (return msg))
+      
       (rtmp.message:message-base
        (show-log "receve unknown message# ~a" (rtmp.message:show msg)))
       )))
@@ -60,16 +67,20 @@
     (rtmp.message:write io (rtmp.message:connect connect-params))
     (force-output io)
 
-    (let ((result (receive-loop io state)))
-      (convert-result result))))
+    (loop FOR msg = (receive-loop io state)
+          UNTIL (typep msg 'rtmp.message::command-base)
+          DO (show-log "drop# ~a" (rtmp.message:show msg))
+          FINALLY (return (convert-result msg)))))
 
 (defun create-stream (io &key state &aux (transaction-id 4)) ; XXX: 適当
   (with-log-section ("net-connection.create-stream")
     (rtmp.message:write io (rtmp.message:create-stream transaction-id :null))
     (force-output io)
     
-    (let ((result (receive-loop io state)))
-      (convert-result result))))
+    (loop FOR msg = (receive-loop io state)
+          UNTIL (typep msg 'rtmp.message::command-base)
+          DO (show-log "drop# ~a" (rtmp.message:show msg))
+          FINALLY (return (convert-result msg)))))
 
 (defun publish (io stream-id publishing-name publishing-type &key state &aux (transaction-id 0))
   (with-log-section ("net-stream.publish")
@@ -79,7 +90,6 @@
     
     (let ((result (receive-loop io state)))
       (convert-result result))))
-
 
 (defun play (io stream-id stream-name start duration reset &key state)
   (with-log-section ("net-stream.play")
@@ -103,7 +113,83 @@
 (defun receive (io &key state)
   (receive-loop io state))
 
-(defun rtmpdump (io &key url app stream-name output)
+(defun rtmpdump-receive-metadata (io state)
+  (loop WITH pendings = '()
+        FOR rlt = (rtmp.client:receive io :state state)
+        UNTIL (and (typep rlt 'rtmp.message:data-base)
+                   (some (lambda (x)
+                           (equal "onMetaData" x))
+                         (rtmp.message::data-base-data rlt)))
+        DO
+        (typecase rlt
+          ((or rtmp.message:video rtmp.message:audio) (push rlt pendings))
+          (otherwise
+           (show-log "drop# ~a" (rtmp.message:show rlt))))
+        FINALLY
+        (return (values (rtmp.message::data-base-data rlt)
+                        pendings))))
+
+(defun rtmpdump-play (io target-stream-id stream-name start duration reset state output)
+  (let ((play-result 
+         (rtmp.client:play io target-stream-id stream-name start duration reset
+                           :state state)))
+    (assert (equal (second (assoc "code" (second play-result) :test #'string=))
+                   "NetStream.Play.Start")
+            () "play failed")
+    
+    ;; header
+    (rtmp.flv:header-write output)
+
+    ;; first tag
+    (multiple-value-bind (metadata pendings) 
+                         (rtmpdump-receive-metadata io state)
+      (let* ((data (with-output-to-bytes (out)
+                     (dolist (x metadata)
+                       (rtmp.amf0:encode x out))))
+             (prev-tag-size
+              (rtmp.flv:tag-write output 
+                                  data
+                                  :prev-tag-size 0
+                                  :tag-type :script-data
+                                  :stream-id target-stream-id
+                                  :timestamp 0)))
+        
+        (flet ((dump-msg (msg)
+                 (typecase msg
+                   (rtmp.message:video 
+                    (let ((data (rtmp.message::video-data msg))
+                          (timestamp (rtmp.message::video-timestamp msg)))
+                      (setf prev-tag-size
+                            (rtmp.flv:tag-write output
+                                                data
+                                                :prev-tag-size prev-tag-size
+                                                :tag-type :video
+                                                :stream-id target-stream-id
+                                                :timestamp timestamp))))
+                   
+                   (rtmp.message:audio 
+                    (let ((data (rtmp.message::audio-data msg))
+                          (timestamp (rtmp.message::audio-timestamp msg)))
+                      (setf prev-tag-size
+                            (rtmp.flv:tag-write output
+                                                data
+                                                :prev-tag-size prev-tag-size
+                                                :tag-type :audio
+                                                :stream-id target-stream-id
+                                                :timestamp timestamp))))
+                   
+                   (otherwise
+                    (show-log "drop# ~a" (rtmp.message:show msg))))))
+          
+          ;; pending tags
+          (loop FOR msg IN pendings
+                DO (dump-msg msg))
+
+          ;; rest tags
+          (loop FOR msg = (rtmp.client:receive io :state state)
+                DO (dump-msg msg)))))))
+  
+(defun rtmpdump-impl (io &key url app stream-name output)
   (declare (string url app stream-name)
            (stream output))
 
@@ -126,10 +212,20 @@
             (reset :false)
             (target-stream-id (round target-stream-id)))
         (unwind-protect
-            (locally
-             (rtmp.client:play io target-stream-id stream-name start duration reset
-                               :state state)
-             (rtmp.client:receive io :state state))
+            (rtmpdump-play io target-stream-id stream-name start duration reset state output)
           (progn
             (rtmp.message:write io (rtmp.message:close-stream 0 :field1 target-stream-id))
             (rtmp.message:write io (rtmp.message:delete-stream 0 target-stream-id))))))))
+
+(defun rtmpdump (rtmp-host rtmp-port app stream-name output-file)
+  (rtmp.socket:with-client-socket-stream (io rtmp-host rtmp-port)
+    (with-open-file (out output-file :direction :output
+                                     :if-exists :supersede
+                                     :element-type 'octet)
+      (unwind-protect
+          (rtmpdump-impl io
+                         :url (format nil "rtmp://~a:~d/" rtmp-host rtmp-port)
+                         :app app
+                         :stream-name stream-name
+                         :output out)
+        (close out)))))
