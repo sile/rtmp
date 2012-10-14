@@ -26,6 +26,23 @@
       (rtmp.message:on-status
        (return (values msg win-size target-stream-id)))
       
+      (rtmp.message:video 
+       ; TODO:
+       )
+      (rtmp.message:audio
+       (with-open-file (out "/tmp/audio.dump" :direction :output
+                            :if-exists :supersede
+                            :element-type 'octet)
+         (write-sequence (rtmp.message::audio-data msg) out))
+
+       (ignore-errors
+       (with-input-from-bytes (in (rtmp.message::audio-data msg))
+         (let ((flag1 (read-uint 1 in))
+               (flag2 (read-uint 1 in)))
+           (print (list flag1 flag2 (ignore-errors (rtmp.flv:decode in))))))
+       )
+       )
+
       (rtmp.message:message-base
        (show-log "receve unknown message# ~a" (rtmp.message:show msg)))
       )))

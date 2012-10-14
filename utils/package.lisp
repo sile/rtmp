@@ -6,6 +6,7 @@
            write-uint
            write-bytes
            read-uint read-uint-from-bytes
+           read-int
            read-bytes
 
            with-output-to-bytes

@@ -27,7 +27,7 @@
 
 (defmacro read-uint (byte-width in &key (endian :big))
   (declare ((integer 1 8) byte-width)
-		   ((member :big :little) endian))
+           ((member :big :little) endian))
   `(the (unsigned-byte ,(* byte-width 8))
 	 (+ ,@(loop FOR i FROM 0 BELOW byte-width
 				FOR offset = (if (eq endian :little) 
@@ -35,6 +35,14 @@
 							   (* (- byte-width i 1) 8))
 				COLLECT `(ash (read-byte ,in) ,offset)))))
 
+(defmacro read-int (byte-width in &key (endian :big))
+  (let ((uint (gensym))
+        (limit (ash 1 (* byte-width 8))))
+    `(let ((,uint (read-uint ,byte-width ,in :endian ,endian)))
+       (the (signed-byte ,(* byte-width 8))
+         (if (< ,uint ,(ash limit -1))
+             ,uint
+           (- ,uint ,limit))))))
 
 (defun read-bytes (length in)
   (let ((buffer (make-array length :element-type '(unsigned-byte 8)))) ; TODO: octet
