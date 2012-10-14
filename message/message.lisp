@@ -115,7 +115,8 @@
                        COLLECT
                        (multiple-value-bind (rlt reason)
                                             (ignore-errors (rtmp.amf0:decode in))
-                         (when (not (eq reason t))
+                         (when (and reason
+                                    (not (eq reason t))) ; XXX:
                            (let ((*print-pretty* nil))
                              (show-log "error: ~a" reason)))
                          rlt)))))
@@ -159,7 +160,7 @@
   (declare ((member 0 3) amf-version))
   (assert (= amf-version 0) () "unsupported AMF version: ~a" amf-version)
 
-  (make-play :type-id +MESSAGE_TYPE_ID_DATA_AMF0+
+  (make-play :type-id +MESSAGE_TYPE_ID_COMMAND_AMF0+
              :stream-id stream-id
              :timestamp timestamp
              :name "play"
@@ -684,10 +685,83 @@
   (defconstant +UCM_EVENT_STREAM_BEGIN+ 0)
   (defconstant +UCM_EVENT_SET_BUFFER_LENGTH+ 3)
   (defconstant +UCM_EVENT_STREAM_IS_RECORDED+ 4)
+  
+  (defconstant +UCM_EVENT_BUFFER_EMPTY+ 31)
+  (defconstant +UCM_EVENT_BUFFER_READY+ 32)
   )
 
 (defstruct (user-control-base (:include message-base))
   (event-type 0 :type (unsigned-byte 16)))
+
+(defstruct (buffer-empty (:include user-control-base))
+  (target-stream-id 0 :type (unsigned-byte 32)))
+
+(defun buffer-empty (target-stream-id &key (timestamp (get-internal-real-time)))
+  (make-buffer-empty :type-id +MESSAGE_TYPE_ID_UCM+
+                     :stream-id +MESSAGE_STREAM_ID_PCM+
+                     :event-type +UCM_EVENT_BUFFER_EMPTY+
+                     :timestamp timestamp
+                     :target-stream-id target-stream-id))
+
+(defmethod show ((m buffer-empty))
+  (with-slots (type-id event-type target-stream-id) m
+    (format nil "(~s \"~d:~d\" stream=~d)"
+            "buffer-empty" type-id event-type target-stream-id)))
+
+(defmethod write-ucm (out (m buffer-empty))
+  (with-slots (target-stream-id) m 
+    (write-uint 4 target-stream-id out)))
+
+(defun parse-buffer-empty (payload timestamp)
+  (let ((target-stream-id (read-uint-from-bytes 4 payload :start 2)))
+    (buffer-empty target-stream-id :timestamp timestamp)))
+
+(defstruct (buffer-ready (:include user-control-base))
+  (target-stream-id 0 :type (unsigned-byte 32)))
+
+(defun buffer-ready (target-stream-id &key (timestamp (get-internal-real-time)))
+  (make-buffer-ready :type-id +MESSAGE_TYPE_ID_UCM+
+                     :stream-id +MESSAGE_STREAM_ID_PCM+
+                     :event-type +UCM_EVENT_BUFFER_READY+
+                     :timestamp timestamp
+                     :target-stream-id target-stream-id))
+
+(defmethod show ((m buffer-ready))
+  (with-slots (type-id event-type target-stream-id) m
+    (format nil "(~s \"~d:~d\" stream=~d)"
+            "buffer-ready" type-id event-type target-stream-id)))
+
+(defmethod write-ucm (out (m buffer-ready))
+  (with-slots (target-stream-id) m 
+    (write-uint 4 target-stream-id out)))
+
+(defun parse-buffer-ready (payload timestamp)
+  (let ((target-stream-id (read-uint-from-bytes 4 payload :start 2)))
+    (buffer-ready target-stream-id :timestamp timestamp)))
+
+(defstruct (unknown-ucm (:include user-control-base))
+  payload)
+
+(defun unknown-ucm (event-type payload &key (timestamp (get-internal-real-time)))
+  (make-unknown-ucm :type-id +MESSAGE_TYPE_ID_UCM+
+                    :stream-id +MESSAGE_STREAM_ID_PCM+
+                    :event-type event-type
+                    :timestamp timestamp
+                    :payload payload))
+
+(defmethod show ((m unknown-ucm))
+  (with-slots (type-id event-type payload) m
+    (format nil "(~s \"~d:~d\" ~a)"
+            "unknown-ucm" type-id event-type payload)))
+
+(defmethod write-ucm (out (m unknown-ucm))
+  (with-slots (payload) m 
+    (write-bytes payload out)))
+
+(defun parse-unknown-ucm (payload timestamp)
+  (let ((event-type (read-uint-from-bytes 2 payload))
+        (data-payload (subseq payload 2)))
+    (unknown-ucm event-type data-payload :timestamp timestamp)))
 
 (defstruct (set-buffer-length (:include user-control-base))
   (target-stream-id 0 :type (unsigned-byte 32))
@@ -763,17 +837,21 @@
   (write-uint 4 (stream-begin-target-stream-id m) out))
 
 (defun parse-stream-begin (payload timestamp)
-  (print payload)
   (let ((target-stream-id (read-uint-from-bytes 4 payload :start 2)))
     (stream-begin target-stream-id :timestamp timestamp)))
 
 (defun parse-user-control (payload stream-id timestamp)
   (declare (ignore stream-id))
   (let ((event-type (read-uint-from-bytes 2 payload)))
-    (ecase event-type
+    (case event-type
       (#. +UCM_EVENT_STREAM_BEGIN+ (parse-stream-begin payload timestamp))
       (#. +UCM_EVENT_SET_BUFFER_LENGTH+ (parse-set-buffer-length payload timestamp))
       (#. +UCM_EVENT_STREAM_IS_RECORDED+ (parse-stream-is-recorded payload timestamp))
+      (#. +UCM_EVENT_BUFFER_EMPTY+ (parse-buffer-empty payload timestamp))
+      (#. +UCM_EVENT_BUFFER_READY+ (parse-buffer-ready payload timestamp))
+      (otherwise
+       (show-log "[WARN] receive unknown ucm: type=~d" event-type)
+       (parse-unknown-ucm payload timestamp))
       )))
 
 ;;; program control
@@ -883,6 +961,9 @@
                   (#. +MESSAGE_TYPE_ID_DATA_AMF3+ (error "unsupported message-type: ~a" type-id))
                   (#. +MESSAGE_TYPE_ID_VIDEO+ (parse-video payload stream-id timestamp))
                   (#. +MESSAGE_TYPE_ID_AUDIO+ (parse-audio payload stream-id timestamp))
+                  (0 
+                   (show-log "[warn] receive type-id=0: => ignore") ; XXX:
+                   (read io state))
                   )))
           (show-log "message: ~a" (show msg))
           msg)))))

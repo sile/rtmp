@@ -5,6 +5,8 @@
            create-stream
            publish
            play
+
+           receive
            ))
 (in-package :rtmp.client)
 

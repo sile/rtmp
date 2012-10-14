@@ -66,3 +66,25 @@
     (let ((result (receive-loop io state)))
       (convert-result result))))
 
+
+(defun play (io stream-id stream-name start duration reset &key state)
+  (with-log-section ("net-stream.play")
+    (rtmp.message:write io (rtmp.message:play stream-name start duration reset 
+                                              :stream-id stream-id
+                                              :timestamp 0))
+
+    #+C
+    (let ((buffer-length 256)) ; XXX:
+      (rtmp.message:write io (rtmp.message:set-buffer-length stream-id buffer-length
+                                                             :timestamp 0)))
+    (force-output io)
+
+    (loop FOR (ok? null info) = (multiple-value-list (convert-result (receive-loop io state)))
+          WHILE (and ok?
+                     (not (equal "NetStream.Play.Start"
+                                 (second (assoc "code" (second info) :test #'string=)))))
+          FINALLY
+          (return info))))
+
+(defun receive (io &key state)
+  (receive-loop io state))

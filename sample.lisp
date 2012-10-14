@@ -14,6 +14,7 @@
     ("flashVer" "FMLE/3.0 (compatible; FMSc/1.0)") 
     ("swfUrl" "rtmp://192.168.100.103/live")))
 
+;;; publish
 (rtmp.socket:with-client-socket-stream (io "localhost" 1935)
   (rtmp.client:handshake io)
 
@@ -30,6 +31,32 @@
                              :state state)
         
         ))))
+
+;    message: ("play" "18:1234:0" 0 (livestream -2.0d0 -1.0d0 FALSE))
+
+;;; play
+(rtmp.socket:with-client-socket-stream (io "localhost" 1935)
+  (rtmp.client:handshake io)
+
+  (let ((state (rtmp.message:make-initial-state)))
+    (rtmp.client:connect io *connect-params* :state state)
+    (multiple-value-bind (_ __ target-stream-id)
+                         (rtmp.client:create-stream io :state state)
+      (declare (ignore _ __))
+
+      (let ((stream-name "livestream")
+            (start -2)
+            (duration -1)
+            (reset :false)
+            (target-stream-id (round target-stream-id)))
+
+        (rtmp.client:play io target-stream-id stream-name start duration reset
+                          :state state)
+        
+        (rtmp.client:receive io :state state)
+        
+        ))))
+
 
 ;; TODO: ack-win-sizeごとのメッセージ送信
 
@@ -64,3 +91,28 @@
    ("audioinputvolume" 75.0d0) 
    ("audiocodecid" ".mp3")
    ("audiodatarate" 96.0d0))))
+
+
+(:MAP (("author" "")
+       ("copyright" "") 
+       ("description" "")
+       ("keywords" "")
+       ("rating" "")
+       ("title" "")
+       ("presetname" "Custom")
+       ("creationdate" "Sun Oct 14 20:54:16 2012")
+       ("videodevice" "ManyCam Virtual Webcam")
+       ("framerate" 15.0d0)
+       ("width" 320.0d0)
+       ("height" 240.0d0)
+       ("videocodecid" "avc1")
+       ("videodatarate" 500.0d0)
+       ("avclevel" 31.0d0)
+       ("avcprofile" 66.0d0)
+       ("videokeyframe_frequency" 5.0d0)
+       ("audiodevice" "ManyCam Virtual Microphone")
+       ("audiosamplerate" 44100.0d0)
+       ("audiochannels" 2.0d0)
+       ("audioinputvolume" 75.0d0)
+       ("audiocodecid" ".mp3")
+       ("audiodatarate" 96.0d0)))

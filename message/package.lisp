@@ -34,6 +34,11 @@
            set-buffer-length
            stream-is-recorded
 
+           buffer-ready
+           buffer-empty
+           
+           unknown-ucm
+
            ;;;
            message-base
 
