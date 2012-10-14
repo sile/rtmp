@@ -244,8 +244,8 @@
   (command-object   t :type (member :null))
   (target-stream-id t :type number))
 
-(defun delete-stream (transaction-id target-stream-id &key (timestamp (get-internal-real-time))
-                                                           (stream-id (next-message-stream-id))
+(defun delete-stream (transaction-id target-stream-id &key (timestamp 0)
+                                                           (stream-id 0)
                                                            (amf-version 0))
   (declare ((member 0 3) amf-version))
   (assert (= amf-version 0) () "unsupported AMF version: ~a" amf-version)
@@ -358,8 +358,8 @@
 
 (defun close-stream (transaction-id &key (field1 :null)
                                       (field2 :null)
-                                      (timestamp (get-internal-real-time))
-                                      (stream-id (next-message-stream-id))
+                                      (timestamp 0)
+                                      (stream-id 0)
                                       (amf-version 0))
   (declare ((member 0 3) amf-version))
   (assert (= amf-version 0) () "unsupported AMF version: ~a" amf-version)

@@ -91,6 +91,85 @@
                     (length body))))))))
 
 
+(defun packet-data (pkt)
+  (with-slots (body) pkt
+    (with-slots (body) body
+      (with-slots (body) body
+        body))))
+
+(defun packet-header (pkt)
+  (with-slots (header) pkt
+    header))
+
+;;; XXX; decoderに属するものではない
+(defmethod packet-write (out (o audio-packet))
+  (with-slots (header) o
+    (with-slots (sound-format sound-rate sound-size sound-type aac-packet-type) header
+      (write-uint 1 (+ (ash sound-type 4) 
+                       (ash sound-rate 2)
+                       (ash sound-size 1)
+                       (ash sound-type 0))
+                  out)
+      (when aac-packet-type
+        (write-uint 1 aac-packet-type out))))
+
+  (write-bytes (packet-data o) out))
+
+(defmethod packet-write (out (o video-packet))
+  (with-slots (header) o
+    (with-slots (frame-type codec-id avc-packet-type composition-time) header
+      (write-uint 1 (+ (ash frame-type 4) 
+                       (ash codec-id   0))
+                  out)
+      (when avc-packet-type
+        (write-uint 1 avc-packet-type out))
+      (when composition-time
+        (write-uint 3 composition-time out))))
+
+  (write-bytes (packet-data o) out))
+
+(defun header-write (out &key (version 1)
+                              (include-audio? t)
+                              (include-video? t)
+                         &aux (data-offset 9))
+  (declare ((unsigned-byte 8) version)
+           (boolean include-video? include-audio?))
+  (write-bytes (creole:string-to-octets "FLV") out)
+  (write-uint 1 version out)
+  (write-uint 1 (+ (ash 0 3)
+                   (ash (if include-audio? 1 0) 2)
+                   (ash 0 1)
+                   (ash (if include-video? 1 0) 0))
+              out)
+  (write-uint 4 data-offset out))
+
+(defun tag-write (out data &key (filter nil)
+                                tag-type
+                                timestamp
+                                stream-id)
+  (declare (boolean filter)
+           ((member :audio :video :script-data) tag-type)
+           ((unsigned-byte 32) timestamp)
+           ((unsigned-byte 24) stream-id)
+           (octets data))
+  
+  (write-uint 1 (+ (ash 0 6)
+                   (ash (if filter 1 0) 5)
+                   (ecase tag-type
+                     (:audio 8)
+                     (:video 9)
+                     (:script-data 18)))
+              out)
+  (write-uint 3 (length data) out)
+  (write-uint 3 (ldb (byte 24 0) timestamp) out)
+  (write-uint 1 (ldb (byte 8 24) timestamp) out)
+  (write-uint 3 stream-id out)
+
+  (write-bytes data out)
+  
+  ;; wrote-size
+  (+ 11 (length data)))
+
 (defun decode-header (in)
   (let ((signature (creole:octets-to-string (read-bytes 3 in)))
         (version (read-uint 1 in))

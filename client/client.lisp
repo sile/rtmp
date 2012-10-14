@@ -27,21 +27,18 @@
        (return (values msg win-size target-stream-id)))
       
       (rtmp.message:video 
-       ; TODO:
-       )
-      (rtmp.message:audio
-       (with-open-file (out "/tmp/audio.dump" :direction :output
-                            :if-exists :supersede
-                            :element-type 'octet)
-         (write-sequence (rtmp.message::audio-data msg) out))
-
        (ignore-errors
-       (with-input-from-bytes (in (rtmp.message::audio-data msg))
-         (let ((flag1 (read-uint 1 in))
-               (flag2 (read-uint 1 in)))
-           (print (list flag1 flag2 (ignore-errors (rtmp.flv:decode in))))))
-       )
-       )
+         (let ((pkt (rtmp.flv:decode-video-packet-bytes 
+                     (rtmp.message::video-data msg))))
+           (show-log "recv video# ~a" pkt)
+           (return pkt))))
+    
+      (rtmp.message:audio
+       (ignore-errors
+         (let ((pkt (rtmp.flv:decode-audio-packet-bytes 
+                     (rtmp.message::audio-data msg))))
+           (show-log "recv audio# ~a" pkt)
+           (return pkt))))
 
       (rtmp.message:message-base
        (show-log "receve unknown message# ~a" (rtmp.message:show msg)))
@@ -106,6 +103,33 @@
 (defun receive (io &key state)
   (receive-loop io state))
 
-(defun rtmpdump (io)
-  ;; TODO:
-  io)
+(defun rtmpdump (io &key url app stream-name output)
+  (declare (string url app stream-name)
+           (stream output))
+
+   (rtmp.client:handshake io)
+   
+   (let ((state (rtmp.message:make-initial-state))
+         (connect-params `(("app" ,app)
+                           ("tcUrl" ,(format nil "~a/~a" (string-right-trim "/" url) app))
+                           ("flashVer" "FMLE/3.0 (compatible; FMSc/1.0)")
+                           ("type" "nonprivate")
+                           ("audioCodecs" #x0FFF)
+                           ("videoCodecs" #x00FF))))
+    (rtmp.client:connect io connect-params :state state)
+    (multiple-value-bind (_ __ target-stream-id)
+                         (rtmp.client:create-stream io :state state)
+      (declare (ignore _ __))
+
+      (let ((start -2)
+            (duration -1)
+            (reset :false)
+            (target-stream-id (round target-stream-id)))
+        (unwind-protect
+            (locally
+             (rtmp.client:play io target-stream-id stream-name start duration reset
+                               :state state)
+             (rtmp.client:receive io :state state))
+          (progn
+            (rtmp.message:write io (rtmp.message:close-stream 0 :field1 target-stream-id))
+            (rtmp.message:write io (rtmp.message:delete-stream 0 target-stream-id))))))))
