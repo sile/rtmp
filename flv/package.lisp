@@ -1,7 +1,13 @@
 (defpackage rtmp.flv
   (:use :common-lisp :rtmp.utils)
   (:export decode
-           decode-bytes))
+           decode-bytes
+           
+           decode-audio-packet
+           decode-audio-packet-bytes
+
+           decode-video-packet
+           decode-video-packet-bytes))
 (in-package :rtmp.flv)
 
 (deftype octet () '(unsigned-byte 8))

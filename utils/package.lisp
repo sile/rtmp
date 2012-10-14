@@ -8,6 +8,7 @@
            read-uint read-uint-from-bytes
            read-int
            read-bytes
+           read-all-bytes
 
            with-output-to-bytes
            with-input-from-bytes

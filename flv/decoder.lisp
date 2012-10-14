@@ -16,6 +16,7 @@
   (sound-type   t :type (unsigned-byte 1))
   (aac-packet-type t :type (or null (unsigned-byte 8)))) ; if sound-format == 10
 
+
 (defstruct video-tag-header
   (frame-type t :type (unsigned-byte 4))
   (codec-id   t :type (unsigned-byte 4))
@@ -61,6 +62,35 @@
   (filter-params t :type (or null filter-params)) ; if filter == 1
   (data t :type (or audio-data video-data script-data)))
 
+(defstruct audio-packet
+  (header t :type audio-tag-header)
+  (body   t :type audio-data))
+
+(defmethod print-object ((o audio-packet) stream)
+  (print-unreadable-object (o stream)
+    (with-slots (header body) o
+      (with-slots (sound-format sound-rate sound-size sound-type aac-packet-type) header
+        (format stream "audio header=~{~a~^:~} body=~d" 
+                (list sound-format sound-rate sound-size sound-type aac-packet-type)
+                (with-slots (body) body
+                  (with-slots (body) body
+                    (length body))))))))
+
+(defstruct video-packet
+  (header t :type video-tag-header)
+  (body   t :type video-data))
+
+(defmethod print-object ((o video-packet) stream)
+  (print-unreadable-object (o stream)
+    (with-slots (header body) o
+      (with-slots (frame-type codec-id avc-packet-type composition-time) header
+        (format stream "video header=~{~a~^:~} body=~d" 
+                (list frame-type codec-id avc-packet-type composition-time)
+                (with-slots (body) body
+                  (with-slots (body) body
+                    (length body))))))))
+
+
 (defun decode-header (in)
   (let ((signature (creole:octets-to-string (read-bytes 3 in)))
         (version (read-uint 1 in))
@@ -90,8 +120,8 @@
      :aac-packet-type aac-packet-type)))
 
 (defun decode-audio-data (header in)
-  (declare (ignore header in))
-  (make-audio-data :body (make-audio-tag-body :body :todo)))
+  (declare (ignore header))
+  (make-audio-data :body (make-audio-tag-body :body (read-all-bytes in))))
 
 (defun decode-video-tag-header (in)
   (let* ((b1 (read-uint 1 in))
@@ -108,8 +138,8 @@
      :composition-time composition-time)))
 
 (defun decode-video-data (header in)
-  (declare (ignore header in))
-  (make-video-data :body (make-video-tag-body :body :todo)))
+  (declare (ignore header))
+  (make-video-data :body (make-video-tag-body :body (read-all-bytes in))))
 
 (defun decode-script-tag-body (in)
   (make-script-tag-body 
@@ -122,6 +152,26 @@
   ;; TODO: if encrypted
   (make-script-data :body (decode-script-tag-body in))
   )
+
+(defun decode-audio-packet (in)
+  (let* ((header (decode-audio-tag-header in))
+         (body (decode-audio-data header in)))
+    (make-audio-packet :header header
+                       :body body)))
+
+(defun decode-audio-packet-bytes (bytes)
+  (with-input-from-bytes (in bytes)
+    (decode-audio-packet in)))
+
+(defun decode-video-packet (in)
+  (let* ((header (decode-video-tag-header in))
+         (body (decode-video-data header in)))
+    (make-video-packet :header header
+                       :body body)))
+
+(defun decode-video-packet-bytes (bytes)
+  (with-input-from-bytes (in bytes)
+    (decode-video-packet in)))
 
 (defun decode-tag (in)
   (let* ((b1 (read-uint 1 in))

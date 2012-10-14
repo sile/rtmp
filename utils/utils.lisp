@@ -49,6 +49,12 @@
     ;; TODO: read length check
     (read-sequence buffer in)
     buffer))
+
+(defun read-all-bytes (in)
+  (loop FOR b = (read-byte in nil nil)
+        WHILE b
+        COLLECT b INTO bytes
+        FINALLY (return (coerce bytes 'octets))))
     
 (defmacro write-uint (byte-width value out &key (endian :big))
   (declare ((integer 1 8) byte-width)
