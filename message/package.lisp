@@ -9,6 +9,7 @@
            delete-stream
            close-stream
            publish
+           play
 
            on-bandwidth-done
            release-stream

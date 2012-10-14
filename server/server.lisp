@@ -41,7 +41,7 @@
                            (random (length #1#))))))
 
 (defun start (io)
-  (handshake io :zero 67436545) ; XXX: magic-number
+  (handshake io)
   
   (with-log-section ("read-loop")
     (loop WITH state = (rtmp.message:make-initial-state)
@@ -89,6 +89,9 @@
                                                           :stream-id stream-id
                                                           :timestamp 0))
            (force-output io)))
+
+        (rtmp.message:play
+         :not-implemented) ; TODO:
         
         (rtmp.message:close-stream
          :ignore) ; TODO

@@ -145,14 +145,65 @@
   (name           t :type string)
   (transaction-id t :type number))
 
+(defstruct (play (:include command-base))
+  (command-object  t :type (member :null))
+  (stream-name     t :type string)
+  (start           t :type number)
+  (duration        t :type number)
+  (reset           t :type (member :true :false)))
+
+(defun play (stream-name start duration reset
+             &key (timestamp 0)
+                  (stream-id (next-message-stream-id))
+                  (amf-version 0))
+  (declare ((member 0 3) amf-version))
+  (assert (= amf-version 0) () "unsupported AMF version: ~a" amf-version)
+
+  (make-play :type-id +MESSAGE_TYPE_ID_DATA_AMF0+
+             :stream-id stream-id
+             :timestamp timestamp
+             :name "play"
+             :transaction-id 0
+             :command-object :null
+             :stream-name stream-name
+             :start start
+             :duration duration
+             :reset reset))
+
+(defmethod write-command (out (m play))
+  (with-slots (command-object stream-name start duration reset) m
+    (rtmp.amf0:encode command-object out)
+    (rtmp.amf0:encode stream-name out)
+    (rtmp.amf0:encode start out)
+    (rtmp.amf0:encode duration out)
+    (rtmp.amf0:encode reset out)))
+
+(defun parse-command-play (in transaction-id stream-id timestamp)
+  (assert (= (round transaction-id) 0) () "transaction-id must be 0")
+  (let ((obj (rtmp.amf0:decode in))
+        (stream-name (rtmp.amf0:decode in))
+        (start (rtmp.amf0:decode in))
+        (duration (rtmp.amf0:decode in))
+        (reset (if (listen in) (rtmp.amf0:decode in) :false)))
+    (assert (not (listen in)) () "stream is n't fully consumed")
+    (assert (eq obj :null) () "command-object must be NULL")
+    (play stream-name start duration reset 
+          :timestamp timestamp
+          :stream-id stream-id)))
+
+(defmethod show-fields ((m play))
+  (with-slots (stream-name start duration reset) m
+    (princ-to-string (list stream-name start duration reset))))
+  
 (defstruct (publish (:include command-base))
   (command-object  t :type (member :null))
   (publishing-name t :type string)
   (publishing-type t :type string)) ; "live" or "record" or "append"
 
-(defun publish (transaction-id publishing-name publishing-type &key (timestamp 0)
-                                                                    (stream-id (next-message-stream-id))
-                                                                    (amf-version 0))
+(defun publish (transaction-id publishing-name publishing-type
+                &key (timestamp 0)
+                     (stream-id (next-message-stream-id))
+                     (amf-version 0))
   (declare ((member 0 3) amf-version))
   (assert (= amf-version 0) () "unsupported AMF version: ~a" amf-version)
 
@@ -616,6 +667,7 @@
         (:createStream (parse-command-create-stream in transaction-id stream-id timestamp))
         (:deleteStream (parse-command-delete-stream in transaction-id stream-id timestamp))
         (:publish (parse-command-publish in transaction-id stream-id timestamp))
+        (:play (parse-command-play in transaction-id stream-id timestamp))
         (:_result (parse-command-_result in transaction-id stream-id timestamp))
         (:onBWDone (parse-command-on-bandwidth-done in transaction-id stream-id timestamp))
         (:releaseStream (parse-command-release-stream in transaction-id stream-id timestamp))
