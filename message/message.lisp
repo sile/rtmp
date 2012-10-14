@@ -685,6 +685,8 @@
   (defconstant +UCM_EVENT_STREAM_BEGIN+ 0)
   (defconstant +UCM_EVENT_SET_BUFFER_LENGTH+ 3)
   (defconstant +UCM_EVENT_STREAM_IS_RECORDED+ 4)
+  (defconstant +UCM_EVENT_PING_REQUEST+ 6)
+  (defconstant +UCM_EVENT_PING_RESPONSE+ 7)
   
   (defconstant +UCM_EVENT_BUFFER_EMPTY+ 31)
   (defconstant +UCM_EVENT_BUFFER_READY+ 32)
@@ -692,6 +694,55 @@
 
 (defstruct (user-control-base (:include message-base))
   (event-type 0 :type (unsigned-byte 16)))
+
+(defstruct (ping-request (:include user-control-base))
+  (ping-timestamp 0 :type (unsigned-byte 32)))
+
+(defun ping-request (ping-timestamp)
+  (make-ping-request :type-id +MESSAGE_TYPE_ID_UCM+
+                     :stream-id +MESSAGE_STREAM_ID_PCM+
+                     :event-type +UCM_EVENT_PING_REQUEST+
+                     :timestamp 0
+                     :ping-timestamp ping-timestamp))
+
+(defmethod show ((m ping-request))
+  (with-slots (type-id event-type ping-timestamp) m
+    (format nil "(~s \"~d:~d\" timestamp=~d)"
+            "ping-request" type-id event-type ping-timestamp)))
+
+(defmethod write-ucm (out (m ping-request))
+  (with-slots (ping-timestamp) m 
+    (write-uint 4 ping-timestamp out)))
+
+(defun parse-ping-request (payload timestamp)
+  (declare (ignore timestamp))
+  (let ((ping-timestamp (read-uint-from-bytes 4 payload :start 2)))
+    (ping-request ping-timestamp)))
+
+(defstruct (ping-response (:include user-control-base))
+  (ping-timestamp 0 :type (unsigned-byte 32)))
+
+(defun ping-response (ping-timestamp)
+  (make-ping-response :type-id +MESSAGE_TYPE_ID_UCM+
+                      :stream-id +MESSAGE_STREAM_ID_PCM+
+                      :event-type +UCM_EVENT_PING_RESPONSE+
+                      :timestamp 0
+                      :ping-timestamp ping-timestamp))
+
+(defmethod show ((m ping-response))
+  (with-slots (type-id event-type ping-timestamp) m
+    (format nil "(~s \"~d:~d\" timestamp=~d)"
+            "ping-response" type-id event-type ping-timestamp)))
+
+(defmethod write-ucm (out (m ping-response))
+  (with-slots (ping-timestamp) m 
+    (write-uint 4 ping-timestamp out)))
+
+(defun parse-ping-response (payload timestamp)
+  (declare (ignore timestamp))
+  (let ((ping-timestamp (read-uint-from-bytes 4 payload :start 2)))
+    (ping-response ping-timestamp)))
+
 
 (defstruct (buffer-empty (:include user-control-base))
   (target-stream-id 0 :type (unsigned-byte 32)))
@@ -847,6 +898,8 @@
       (#. +UCM_EVENT_STREAM_BEGIN+ (parse-stream-begin payload timestamp))
       (#. +UCM_EVENT_SET_BUFFER_LENGTH+ (parse-set-buffer-length payload timestamp))
       (#. +UCM_EVENT_STREAM_IS_RECORDED+ (parse-stream-is-recorded payload timestamp))
+      (#. +UCM_EVENT_PING_REQUEST+ (parse-ping-request payload timestamp))
+      (#. +UCM_EVENT_PING_RESPONSE+ (parse-ping-response payload timestamp))
       (#. +UCM_EVENT_BUFFER_EMPTY+ (parse-buffer-empty payload timestamp))
       (#. +UCM_EVENT_BUFFER_READY+ (parse-buffer-ready payload timestamp))
       (otherwise

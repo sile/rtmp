@@ -26,6 +26,9 @@
       (rtmp.message:on-status
        (return (values msg win-size target-stream-id)))
       
+      (rtmp.message:ping-request
+       (rtmp.message:write io (rtmp.message:ping-response (get-internal-real-time))))
+
       (rtmp.message:video 
        (return msg)
        #+IGNORE

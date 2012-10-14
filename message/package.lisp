@@ -33,6 +33,8 @@
            stream-begin
            set-buffer-length
            stream-is-recorded
+           ping-request
+           ping-response
 
            buffer-ready
            buffer-empty
