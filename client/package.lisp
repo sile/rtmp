@@ -7,6 +7,8 @@
            play
 
            receive
+
+           rtmpdump
            ))
 (in-package :rtmp.client)
 

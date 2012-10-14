@@ -88,3 +88,7 @@
 
 (defun receive (io &key state)
   (receive-loop io state))
+
+(defun rtmpdump (io)
+  ;; TODO:
+  io)

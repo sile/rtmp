@@ -12,7 +12,10 @@
     ("tcUrl" "rtmp://192.168.100.103/live")
     ("type" "nonprivate")
     ("flashVer" "FMLE/3.0 (compatible; FMSc/1.0)") 
-    ("swfUrl" "rtmp://192.168.100.103/live")))
+    ("swfUrl" "rtmp://192.168.100.103/live")
+    ("audioCodecs" #x0FFF)
+    ("videoCodecs" #x00FF)
+    ))
 
 ;;; publish
 (rtmp.socket:with-client-socket-stream (io "localhost" 1935)

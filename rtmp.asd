@@ -30,6 +30,10 @@
                (:file "message/chunk")
                (:file "message/message")
 
+               (:file "flv/package")
+               (:file "flv/decoder")
+               (:file "flv/flv")
+               
                (:file "client/package")
                (:file "client/handshake")
                (:file "client/client")
