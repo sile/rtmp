@@ -143,6 +143,11 @@
           ((or rtmp.message:video rtmp.message:audio) (push rlt pendings))
           (otherwise
            (show-log "drop# ~a" (rtmp.message:show rlt))))
+        (when (> (length pendings) 32)
+          ;; XXX: 諦める
+          (return (values '("onMetaData" (:map ()))
+                          pendings)))
+
         FINALLY
         (return (values (rtmp.message::data-base-data rlt)
                         pendings))))
