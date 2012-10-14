@@ -682,10 +682,33 @@
   (defconstant +MESSAGE_TYPE_ID_UCM+ 4)
   
   (defconstant +UCM_EVENT_STREAM_BEGIN+ 0)
+  (defconstant +UCM_EVENT_STREAM_IS_RECORDED+ 4)
   )
 
 (defstruct (user-control-base (:include message-base))
   (event-type 0 :type (unsigned-byte 16)))
+
+(defstruct (stream-is-recorded (:include user-control-base))
+  (target-stream-id 0 :type (unsigned-byte 32)))
+
+(defun stream-is-recorded (target-stream-id &key (timestamp (get-internal-real-time)))
+  (make-stream-is-recorded :type-id +MESSAGE_TYPE_ID_UCM+
+                           :stream-id +MESSAGE_STREAM_ID_PCM+
+                           :event-type +UCM_EVENT_STREAM_IS_RECORDED+
+                           :timestamp timestamp
+                           :target-stream-id target-stream-id))
+
+(defmethod show ((m stream-is-recorded))
+  (with-slots (type-id event-type target-stream-id) m
+    (format nil "(~s \"~d:~d\" stream-id=~d)"
+            "stream-is-recorded" type-id event-type target-stream-id))) 
+
+(defmethod write-ucm (out (m stream-is-recorded))
+  (write-uint 4 (stream-is-recorded-target-stream-id m) out))
+
+(defun parse-stream-is-recorded (payload timestamp)
+  (let ((target-stream-id (read-uint-from-bytes 4 payload :start 2)))
+    (stream-is-recorded target-stream-id :timestamp timestamp)))
 
 (defstruct (stream-begin (:include user-control-base))
   (target-stream-id 0 :type (unsigned-byte 32)))
@@ -712,6 +735,7 @@
   (write-uint 4 (stream-begin-target-stream-id m) out))
 
 (defun parse-stream-begin (payload timestamp)
+  (print payload)
   (let ((target-stream-id (read-uint-from-bytes 4 payload :start 2)))
     (stream-begin target-stream-id :timestamp timestamp)))
 
@@ -720,6 +744,7 @@
   (let ((event-type (read-uint-from-bytes 2 payload)))
     (ecase event-type
       (#. +UCM_EVENT_STREAM_BEGIN+ (parse-stream-begin payload timestamp))
+      (#. +UCM_EVENT_STREAM_IS_RECORDED+ (parse-stream-is-recorded payload timestamp))
       )))
 
 ;;; program control

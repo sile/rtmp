@@ -10,7 +10,7 @@
            close-stream
            publish
            play
-
+           
            on-bandwidth-done
            release-stream
            fcpublish
@@ -31,6 +31,7 @@
 
            ;;; user control
            stream-begin
+           stream-is-recorded
 
            ;;;
            message-base
