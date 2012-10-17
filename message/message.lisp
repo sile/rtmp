@@ -14,6 +14,12 @@
 (defparameter *chunk-stream-id* 3)
 (defparameter *message-stream-id* 1)
 
+(defparameter *amf-ver* 0)
+(defun amf-decode (in)
+  (ecase *amf-ver*
+    (0 (rtmp.amf0:decode in))
+    (3 (rtmp.amf3:decode in))))
+
 (defun next-chunk-stream-id ()
   (when (> *chunk-stream-id* 65599)
     (setf *chunk-stream-id* 3))
@@ -114,7 +120,7 @@
                  (loop WHILE (listen in) 
                        COLLECT
                        (multiple-value-bind (rlt reason)
-                                            (ignore-errors (rtmp.amf0:decode in))
+                                            (ignore-errors (amf-decode in))
                          (when (and reason
                                     (not (eq reason t))) ; XXX:
                            (let ((*print-pretty* nil))
@@ -181,11 +187,11 @@
 
 (defun parse-command-play (in transaction-id stream-id timestamp)
   (assert (= (round transaction-id) 0) () "transaction-id must be 0")
-  (let ((obj (rtmp.amf0:decode in))
-        (stream-name (rtmp.amf0:decode in))
-        (start (rtmp.amf0:decode in))
-        (duration (rtmp.amf0:decode in))
-        (reset (if (listen in) (rtmp.amf0:decode in) :false)))
+  (let ((obj (amf-decode in))
+        (stream-name (amf-decode in))
+        (start (if (listen in) (amf-decode in) -2))
+        (duration (if (listen in) (amf-decode in) -1))
+        (reset (if (listen in) (amf-decode in) :false)))
     (assert (not (listen in)) () "stream is n't fully consumed")
     (assert (eq obj :null) () "command-object must be NULL")
     (play stream-name start duration reset 
@@ -224,9 +230,9 @@
     (rtmp.amf0:encode publishing-type out)))
 
 (defun parse-command-publish (in transaction-id stream-id timestamp)
-  (let ((obj (rtmp.amf0:decode in))
-        (publishing-name (rtmp.amf0:decode in))
-        (publishing-type (rtmp.amf0:decode in)))
+  (let ((obj (amf-decode in))
+        (publishing-name (amf-decode in))
+        (publishing-type (amf-decode in)))
     (assert (not (listen in)) () "stream is n't consumed")
     (assert (eq obj :null) () "command-object must be NULL")
     
@@ -264,8 +270,8 @@
     (rtmp.amf0:encode target-stream-id out)))
 
 (defun parse-command-delete-stream (in transaction-id stream-id timestamp)
-  (let ((obj (rtmp.amf0:decode in))
-        (target-stream-id (rtmp.amf0:decode in)))
+  (let ((obj (amf-decode in))
+        (target-stream-id (amf-decode in)))
     (assert (not (listen in)) () "stream is n't consumed")
     (assert (eq obj :null) () "command-object must be NULL")
     
@@ -299,7 +305,7 @@
     (rtmp.amf0:encode command-object out)))
 
 (defun parse-command-create-stream (in transaction-id stream-id timestamp)
-  (let ((obj (rtmp.amf0:decode in)))
+  (let ((obj (amf-decode in)))
     (assert (not (listen in)) () "stream is n't consumed")
     (create-stream transaction-id 
                    obj
@@ -338,8 +344,8 @@
     (rtmp.amf0:encode (to-amf-map field2) out)))
 
 (defun parse-command-on-status (in transaction-id stream-id timestamp)
-  (let ((obj1 (rtmp.amf0:decode in))
-        (obj2 (rtmp.amf0:decode in)))
+  (let ((obj1 (amf-decode in))
+        (obj2 (amf-decode in)))
     (assert (not (listen in)) () "stream is n't consumed")
     (on-status transaction-id 
                :stream-id stream-id
@@ -378,7 +384,7 @@
     (rtmp.amf0:encode field2 out)))
 
 (defun parse-command-close-stream (in transaction-id stream-id timestamp)
-  (let ((obj1 (rtmp.amf0:decode in))
+  (let ((obj1 (amf-decode in))
         (obj2 :null)) ;XXX: (rtmp.amf0:decode in)))
     (assert (not (listen in)) () "stream is n't consumed")
     (close-stream transaction-id 
@@ -419,8 +425,8 @@
     (rtmp.amf0:encode field2 out)))
 
 (defun parse-command-fcpublish (in transaction-id stream-id timestamp)
-  (let ((obj1 (rtmp.amf0:decode in))
-        (obj2 (rtmp.amf0:decode in)))
+  (let ((obj1 (amf-decode in))
+        (obj2 (amf-decode in)))
     (assert (not (listen in)) () "stream is n't consumed")
     (fcpublish transaction-id 
                :stream-id stream-id
@@ -459,8 +465,8 @@
     (rtmp.amf0:encode field2 out)))
 
 (defun parse-command-fcunpublish (in transaction-id stream-id timestamp)
-  (let ((obj1 (rtmp.amf0:decode in))
-        (obj2 (rtmp.amf0:decode in)))
+  (let ((obj1 (amf-decode in))
+        (obj2 (amf-decode in)))
     (assert (not (listen in)) () "stream is n't consumed")
     (fcunpublish transaction-id 
                  :stream-id stream-id
@@ -512,8 +518,8 @@
     (rtmp.amf0:encode field2 out)))
 
 (defun parse-command-release-stream (in transaction-id stream-id timestamp)
-  (let ((obj1 (rtmp.amf0:decode in))
-        (obj2 (rtmp.amf0:decode in)))
+  (let ((obj1 (amf-decode in))
+        (obj2 (amf-decode in)))
     (release-stream transaction-id 
                     :stream-id stream-id
                     :timestamp timestamp
@@ -544,7 +550,7 @@
     (rtmp.amf0:encode field1 out)))
 
 (defun parse-command-on-bandwidth-done (in transaction-id stream-id timestamp)
-  (let ((obj (rtmp.amf0:decode in)))
+  (let ((obj (amf-decode in)))
     (on-bandwidth-done transaction-id 
                        :stream-id stream-id
                        :timestamp timestamp
@@ -582,8 +588,8 @@
     (rtmp.amf0:encode (if (listp information) `(:map ,information) information) out)))
 
 (defun parse-command-_result (in transaction-id stream-id timestamp)
-  (let ((properties (rtmp.amf0:decode in))
-        (information (rtmp.amf0:decode in)))
+  (let ((properties (amf-decode in))
+        (information (amf-decode in)))
 
     (_result transaction-id
              (if (listp properties) (second properties) properties)
@@ -646,8 +652,8 @@
 
 (defun parse-command-connect (in transaction-id stream-id timestamp)
   (declare (ignore transaction-id))
-  (let ((command-object (rtmp.amf0:decode in))
-        (optional-args  (when (listen in) (rtmp.amf0:decode in))))
+  (let ((command-object (amf-decode in))
+        (optional-args  (when (listen in) (amf-decode in))))
     (declare (rtmp.amf0:object-type command-object optional-args))
 
     (connect (second command-object )
@@ -655,14 +661,22 @@
              :timestamp timestamp
              :optional-args (second optional-args))))
 
-(defun parse-command (payload stream-id timestamp amf-version)
-  (declare (ignore amf-version))
-
+(defun parse-command (payload stream-id timestamp amf-version &aux (*amf-ver* 0)) ;XXX: amf-version))
   (with-input-from-bytes (in payload)
-    (let* ((command-name   (rtmp.amf0:decode in))
-           (transaction-id (rtmp.amf0:decode in))
+    (when (= amf-version 3)
+      ;; XXX: wowzaのクライアント(examples/LiveVideoStreaming/client/live.html)の場合は、
+      ;;      AMF3が指定された場合でも、エンコード形式自体は AMF0で送られてきている。(先頭一バイトは常に0?)
+      ;;      => 先頭一バイトで AMF のバージョンをさらに指定しているとか？
+      (read-uint 1 in)) 
+
+    (let* ((command-name   (amf-decode in))
+           (transaction-id (amf-decode in))
            (command (intern (string-upcase command-name) :keyword))) ; XXX: gc
       (show-log "command-name# ~s" command-name)
+
+      (when (eq command-name :undefined)
+        (print payload)
+        (print (loop FOR x = (ignore-errors (amf-decode in)) WHILE x COLLECT x)))
       (ecase command
         (:connect (parse-command-connect in transaction-id stream-id timestamp))
         (:createStream (parse-command-create-stream in transaction-id stream-id timestamp))
@@ -1035,7 +1049,7 @@
                   (#. +MESSAGE_TYPE_ID_SET_PEER_BANDWIDTH+ (parse-set-peer-bandwidth payload stream-id timestamp))
                   (#. +MESSAGE_TYPE_ID_UCM+ (parse-user-control payload stream-id timestamp))
                   (#. +MESSAGE_TYPE_ID_COMMAND_AMF0+ (parse-command payload stream-id timestamp 0))
-                  (#. +MESSAGE_TYPE_ID_COMMAND_AMF3+ (error "unsupported message-type: ~a" type-id))
+                  (#. +MESSAGE_TYPE_ID_COMMAND_AMF3+ (parse-command payload stream-id timestamp 3))
                   (#. +MESSAGE_TYPE_ID_DATA_AMF0+ (parse-data payload stream-id timestamp 0))
                   (#. +MESSAGE_TYPE_ID_DATA_AMF3+ (error "unsupported message-type: ~a" type-id))
                   (#. +MESSAGE_TYPE_ID_VIDEO+ (parse-video payload stream-id timestamp))

@@ -74,6 +74,7 @@
 
 (defun decode-impl (in)
   (let ((marker-code (read-uint 1 in)))
+    (print (list :code marker-code))
     (ecase marker-code
       (#. +UNDEFINED_MARKER+ (decode-undefined in))
       (#. +NULL_MARKER+ (decode-null in))
