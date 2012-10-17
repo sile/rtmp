@@ -1,1 +1,16 @@
 (in-package :rtmp.amf3)
+
+
+(defconstant +UNDEFINED_MARKER+ #x00)
+(defconstant +NULL_MARKER+ #x01)
+(defconstant +FALSE_MARKER+ #x02)
+(defconstant +TRUE_MARKER+ #x03)
+(defconstant +INTEGER_MARKER+ #x04)
+(defconstant +DOUBLE_MARKER+ #x05)
+(defconstant +STRING_MARKER+ #x06)
+(defconstant +XML_DOC_MARKER+ #x07)
+(defconstant +DATE_MARKER+ #x08)
+(defconstant +ARRAY_MARKER+ #x09)
+(defconstant +OBJECT_MARKER+ #x0A)
+(defconstant +XML_MARKER+ #x0B)
+(defconstant +BYTE_ARRAY_MARKER+ #x0C)
