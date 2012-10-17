@@ -1,6 +1,6 @@
 (in-package :rtmp.server)
 
-(defparameter *default-ack-win-size* 2000000)
+(defparameter *default-ack-win-size* 2500000)
 
 (defun handle-connect (io state)
   (declare (ignorable state))
@@ -10,12 +10,13 @@
 
     (rtmp.message:write io (rtmp.message:stream-begin 0)) ;; XXX: 必要? (and 適切?)
 
-    ;; (rtmp.message:write io (rtmp.message:set-chunk-size 1024))
+;;    (rtmp.message:write io (rtmp.message:set-chunk-size 128))
+
     (force-output io)
 
 ;; for FMLE
-;;    (let ((msg (rtmp.message:read io state)))
-;;      (assert (typep msg 'rtmp.message:ack-win-size) () "not ack-win-size"))
+    (let ((msg (rtmp.message:read io state)))
+      (assert (typep msg 'rtmp.message:ack-win-size) () "not ack-win-size"))
       
     (let ((props '(("fmsVer" "FMS/4,5,0,297")
                    ("capabilities" 255)
@@ -24,13 +25,18 @@
           (infos '(("level" "status")
                    ("code" "NetConnection.Connect.Success") 
                    ("description" "Connection succeeded.")
-                   ("objectEncoding" 0)
+                   ("objectEncoding" 3)  ;; TODO: connect request からとってくる
                    ("data" (:MAP NIL)) 
-                   ("version" "4,5,0,297"))))
-      (rtmp.message:write io (rtmp.message:_result 1 props infos :stream-id 0)))
-    
-    (rtmp.message:write io (rtmp.message:on-bandwidth-done 0 :stream-id 0))
-    (rtmp.message:write io (rtmp.message:ack-win-size *default-ack-win-size*))
+                   ("version" "4,5,0,297")))
+         
+          (play-stream-id 234))
+      (rtmp.message:write io (rtmp.message:_result 1 props infos :stream-id play-stream-id))
+      
+      (rtmp.message:write io (rtmp.message:on-bandwidth-done 0 :stream-id 0))
+      (rtmp.message:write io (rtmp.message:ack-win-size *default-ack-win-size*))
+      
+      (rtmp.message:write io (rtmp.message:stream-begin play-stream-id)) ;; XXX: 必要? (and 適切?)
+      )
     (force-output io)
     ))
 
