@@ -23,6 +23,12 @@
                (:file "amf0/encoder")
                (:file "amf0/amf0")
 
+               (:file "amf3/package")
+               (:file "amf3/marker")
+               (:file "amf3/decoder")
+               (:file "amf3/encoder")
+               (:file "amf3/amf3")
+
                (:file "socket/package")
                (:file "socket/socket")
 
